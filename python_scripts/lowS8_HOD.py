@@ -5,31 +5,43 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-# Initiate the HOD instance with default parameter file default_HOD_parameters.yaml
-zmin= sys.argv[1]
-zmax= sys.argv[2]
-
-HOD_obj= HOD(param_file=f'/pscratch/sd/j/jiaxi/b_phi/conf/lowS8_HOD_z{zmin}z{zmax}.yaml', path_to_abacus_sim='/global/cfs/cdirs/desi/cosmosim/Abacus', **{'hcat':{'Abacus':{'sim_name':'AbacusSummit_base_c000_ph000'}}})
-
-# Create galaxy mock catalog, First evaluation is slower because it needs to compile jit functions
-cats = HOD_obj.make_mock_cat(fix_seed=None) #return 1 catalogue per tracer 
-
-# load the SV3 data
 from pycorr import TwoPointCorrelationFunction
 from pycorr import project_to_multipoles, project_to_wp
 
-origin = f'/global/cfs/cdirs/desi/survey/catalogs/edav1/xi/sv3/{{}}'
+# Initiate the HOD instance with default parameter file default_HOD_parameters.yaml
+tracer = sys.argv[1]
 
+# load the SV3 data
+origin = f'/global/cfs/cdirs/desi/survey/catalogs/edav1/xi/sv3/{{}}'
 rebin=2
 extra = '_nran18_split20'
 weight  = 'default_angular_bitwise_FKP'
 njk     = 128  
 galcomb = '_NScomb'
 
-#compute clustering for 1 tracer, it apply rsd following the los parameter
-for tracer in HOD_obj.args['tracers']:
-    print(f'plot {tracer}')
-    plt.rc('font', family='serif', size=12) 
+if tracer == 'LRG':
+    zmins = [0.4,0.6,0.8]
+    zmaxs = [0.6,0.8,1.1]
+    redshifts=[0.5,0.8,1.1]
+elif tracer == 'ELG':
+    zmins = [0.8,1.1]
+    zmaxs = [1.1,1.6]
+    redshifts=[1.1,1.325]
+elif tracer == 'QSO':
+    zmins = [0.8,1.1,1.6,2.1]
+    zmaxs = [1.1,1.6,2.1,3.5]
+    redshifts=[1.1,1.325,1.850,2.500]
+    vsmears = [100,100,300,550]
+
+plt.rc('font', family='serif', size=12) 
+for iz,(zmin,zmax,redshift) in enumerate(zip(zmins,zmaxs,redshifts)):
+    if tracer == 'QSO':
+        HOD_obj= HOD(param_file=f'/pscratch/sd/j/jiaxi/b_phi/conf/lowS8_HOD_{tracer}.yaml', path_to_abacus_sim='/global/cfs/cdirs/desi/cosmosim/Abacus', **{'hcat':{'z_simu':redshift,'Abacus':{'sim_name':'AbacusSummit_base_c000_ph000','z_simu':redshift}},'QSO':{'vsmear':vsmears[iz]}})
+    else:
+        HOD_obj= HOD(param_file=f'/pscratch/sd/j/jiaxi/b_phi/conf/lowS8_HOD_{tracer}.yaml', path_to_abacus_sim='/global/cfs/cdirs/desi/cosmosim/Abacus', **{'hcat':{'z_simu':redshift,'Abacus':{'sim_name':'AbacusSummit_base_c000_ph000','z_simu':redshift}}})
+
+    # Create galaxy mock catalog, First evaluation is slower because it needs to compile jit functions
+    cats = HOD_obj.make_mock_cat(fix_seed=None) #return 1 catalogue per tracer 
 
     # plot the 2PCF multipoles   
     fig = plt.figure(figsize=(12,4))
@@ -55,8 +67,10 @@ for tracer in HOD_obj.args['tracers']:
 
     plt.xscale('log')
     plt.xlim(rpmin,30)
-    if tracer == 'LRG':plt.ylim(105,230)
-    elif tracer == 'ELG':plt.ylim(18,85)
+    if tracer == 'LRG':
+        plt.ylim(105,230)
+    elif tracer == 'ELG':
+        plt.ylim(18,85)
     plt.xlabel('$r_p$ [$\mathrm{{Mpc}}/h$]')
     plt.ylabel(r'$r_p \cdot w_p(r_p)$ [$\mathrm{{Mpc}}/h$]$^2$')
 
