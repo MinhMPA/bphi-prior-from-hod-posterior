@@ -36,9 +36,9 @@ elif tracer == 'QSO':
 plt.rc('font', family='serif', size=12) 
 for iz,(zmin,zmax,redshift) in enumerate(zip(zmins,zmaxs,redshifts)):
     if tracer == 'QSO':
-        HOD_obj= HOD(param_file=f'/pscratch/sd/j/jiaxi/b_phi/conf/lowS8_HOD_{tracer}.yaml', path_to_abacus_sim='/global/cfs/cdirs/desi/cosmosim/Abacus', **{'hcat':{'z_simu':redshift,'Abacus':{'sim_name':'AbacusSummit_base_c000_ph000','z_simu':redshift}},'QSO':{'vsmear':vsmears[iz]}})
+        HOD_obj= HOD(param_file=f'../HOD_config/lowS8_HOD_{tracer}.yaml', path_to_abacus_sim='/global/cfs/cdirs/desi/cosmosim/Abacus', **{'hcat':{'z_simu':redshift,'Abacus':{'sim_name':'AbacusSummit_base_c000_ph000','z_simu':redshift}},'QSO':{'vsmear':vsmears[iz]}})
     else:
-        HOD_obj= HOD(param_file=f'/pscratch/sd/j/jiaxi/b_phi/conf/lowS8_HOD_{tracer}.yaml', path_to_abacus_sim='/global/cfs/cdirs/desi/cosmosim/Abacus', **{'hcat':{'z_simu':redshift,'Abacus':{'sim_name':'AbacusSummit_base_c000_ph000','z_simu':redshift}}})
+        HOD_obj= HOD(param_file=f'../HOD_config/lowS8_HOD_{tracer}.yaml', path_to_abacus_sim='/global/cfs/cdirs/desi/cosmosim/Abacus', **{'hcat':{'z_simu':redshift,'Abacus':{'sim_name':'AbacusSummit_base_c000_ph000','z_simu':redshift}}})
 
     # Create galaxy mock catalog, First evaluation is slower because it needs to compile jit functions
     cats = HOD_obj.make_mock_cat(fix_seed=None) #return 1 catalogue per tracer 
