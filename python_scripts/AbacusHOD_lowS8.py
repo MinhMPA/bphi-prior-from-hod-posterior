@@ -31,11 +31,11 @@ for iz,(zmin,zmax,redshift) in enumerate(zip(zmins,zmaxs,redshifts)):
             if not os.path.exists(sourcedir.format(cosmo,ph)):
                 print(f'creating {sourcedir.format(cosmo,ph)}')
                 if tracer == 'QSO':
-                    HOD_obj= HOD(param_file=f'../HOD_config/lowS8_HOD_{tracer}.yaml', path_to_abacus_sim='/global/cfs/cdirs/desi/cosmosim/Abacus', **{'hcat':{'z_simu':redshift,'Abacus':{'sim_name':f'AbacusSummit_base_c{cosmo}_ph{ph}','z_simu':redshift}},'QSO':{'vsmear':vsmears[iz]}})
+                    HOD_obj= HOD(param_file=f'./HOD_config/lowS8_HOD_{tracer}.yaml', path_to_abacus_sim='/global/cfs/cdirs/desi/cosmosim/Abacus', **{'hcat':{'z_simu':redshift,'Abacus':{'sim_name':f'AbacusSummit_base_c{cosmo}_ph{ph}','z_simu':redshift}},'QSO':{'vsmear':vsmears[iz]}})
                 else:
-                    HOD_obj= HOD(param_file=f'../HOD_config/lowS8_HOD_{tracer}.yaml', path_to_abacus_sim='/global/cfs/cdirs/desi/cosmosim/Abacus', **{'hcat':{'z_simu':redshift,'Abacus':{'sim_name':f'AbacusSummit_base_c{cosmo}_ph{ph}','z_simu':redshift}}})
+                    HOD_obj= HOD(param_file=f'./HOD_config/lowS8_HOD_{tracer}.yaml', path_to_abacus_sim='/global/cfs/cdirs/desi/cosmosim/Abacus', **{'hcat':{'z_simu':redshift,'Abacus':{'sim_name':f'AbacusSummit_base_c{cosmo}_ph{ph}','z_simu':redshift}}})
 
-                cats = HOD_obj.make_mock_cat(fix_seed=None)  
+                cats = HOD_obj.make_mock_cat(fix_seed=100)  
                 cats.write(sourcedir.format(cosmo,ph))
                 cats=[]
             else:
