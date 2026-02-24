@@ -1,58 +1,47 @@
 import numpy as np
-import matplotlib.pyplot as plt
+from matplotlib import pyplot as plt
 from astropy.table import Table
 
-data = Table.read('bphi_results.txt',format='ascii.no_header')
+datatot = Table.read(f'bphi_results_bphilowS8.txt',format='ascii.no_header')
+phs  = ['000','001','002','003','004','005']
+b1=[]
+zs=[]
+bphi=[]
+bphidz=[]
+# read the file
+for tracer in np.unique(datatot['col1']):
+    sel= datatot['col1'] == tracer
+    data = datatot[sel]
+    # the lhs result with different cosmologies
+    for zsnap in np.unique(data['col4']):
+        b1.append(np.mean(data['col10'][(data['col4']==zsnap)]/2/1.686+1))
+        zs.append(zsnap)
+        bphi.append(np.mean(data['col7'][(data['col4']==zsnap)]))
+    # the rhs results with zsnapshots
+    snaps = np.unique(data['col4'])
+    for k in range(len(snaps)-1):
+        dlog_ndz=np.log(data['col5'][len(phs)*k:len(phs)*(k+1)]/data['col5'][len(phs)*(k+1):len(phs)*(k+2)])
+        dlog_sigma8dz = np.log(D(data['col4'][len(phs)*k])/D(data['col4'][len(phs)*(k+1)]))
+        bphidz.append(2*dlog_ndz/dlog_sigma8dz)
 
-snaps  = [0.5,0.8,1.09,1.1,1.325,1.11,1.325,1.85,2.5]
-bphis  = [2.96,3.63,4.67,1.22,1.75,3.31,3.42,5.58,7.97]
-errors = [0.01,0.01,0.02,0.01,0.02,0.06,0.07,0.11,0.08]
-ps     = [0.98,1,1.04,0.96,0.98,1.03,1.035,1.065,1.16]
-perrs  = [0.01]*5+[0.11,0.037,0.05,0.04]
-biases = [1.86,2.08,2.42,1.32,1.50,2.03,2.05,2.70,3.5]
-berrs  = [0.01,0.01,0.01,0.01,0.01,0.04,0.02,0.06,0.04]
-tracers=['LRG','ELG','QSO']
-colors = ['r','b','c']
+zmid  = (np.array(zs)[[1,3,4,6,7,8]]+np.array(zs)[[0,2,3,5,6,7]])/2
+b1mid = (np.array(b1)[[1,3,4,6,7,8]]+np.array(b1)[[0,2,3,5,6,7]])/2
 
-plt.rc('font', family='serif', size=12) 
-fig = plt.figure(figsize=(4,4))
-plt.subplots_adjust(left = 0.15,right = 0.98,bottom=0.15,top = 0.93, )
-for tracer,color in zip(tracers,colors):
-    sel= data['col1'] == tracer
-    plt.errorbar(np.mean(data[sel]['col4'].reshape(np.sum(sel)//6,6),axis=1), np.mean(data[sel]['col7'].reshape(np.sum(sel)//6,6),axis=1), yerr=np.std(data[sel]['col7'].reshape(np.sum(sel)//6,6),axis=1),
-                        fmt='o', color=color, ecolor=color)
-    plt.errorbar([],[],[],label=tracer,fmt='o',color=color,ecolor=color)
-plt.xlabel('redshift')
-plt.ylabel(r'$b_{\phi}$')
+# compare the bphi-z
+plt.plot(np.array(zs),np.array(bphi),'bo',label='LCDM-lowS8 lhs')
+plt.plot(zmid,np.array(bphidz),'r^',label='LCDM dz rhs')
 plt.legend()
-plt.title('separate Universe with AbacusHOD: c000 vs c004    ',fontsize=10)
-plt.savefig('evol_bphi')
-plt.close()
-   
-fig = plt.figure(figsize=(4,4))
-plt.subplots_adjust(left = 0.2,right = 0.98,bottom=0.15,top = 0.93, )
-for tracer,color in zip(tracers,colors):
-    sel= data['col1'] == tracer
-    plt.errorbar(np.mean(data[sel]['col4'].reshape(np.sum(sel)//6,6),axis=1), np.mean(data[sel]['col8'].reshape(np.sum(sel)//6,6),axis=1), yerr=np.std(data[sel]['col8'].reshape(np.sum(sel)//6,6),axis=1),
-                        fmt='o', color=color, ecolor=color)
-    plt.errorbar([],[],[],label=tracer,fmt='o',color=color,ecolor=color)
 plt.xlabel('redshift')
-plt.ylabel('p')
-plt.title('separate Universe with AbacusHOD: c000 vs c004    ',fontsize=10)
-plt.savefig('evol_p_value')
+plt.ylabel('bphi')
+plt.savefig('evolution_bphi-z')
 plt.close()
-   
-fig = plt.figure(figsize=(4,4))
-plt.subplots_adjust(left = 0.15,right = 0.98,bottom=0.15,top = 0.93, )
-for tracer,color in zip(tracers,colors):
-    sel= data['col1'] == tracer
-    plt.errorbar(np.mean(data[sel]['col10'].reshape(np.sum(sel)//6,6),axis=1)/2/1.686+1, np.mean(data[sel]['col7'].reshape(np.sum(sel)//6,6),axis=1), xerr=np.std(data[sel]['col10'].reshape(np.sum(sel)//6,6),axis=1)/2/1.686, yerr=np.std(data[sel]['col7'].reshape(np.sum(sel)//6,6),axis=1),
-                        fmt='o', color=color, ecolor=color)
-    plt.errorbar([],[],[],label=tracer,fmt='o',color=color,ecolor=color)
-plt.plot(biases,(np.array(biases)-1)*1.686*2,'k--',label=r'$b_{\phi}=2\delta_c(b_1-1)$')
-plt.xlabel(r'$b_1$')
-plt.ylabel(r'$b_{\phi}$')
+
+# compare the bphi-b1
+plt.plot(np.array(b1),np.array(bphi),'bo',label='LCDM-lowS8 lhs')
+plt.plot(b1mid,np.array(bphidz),'r^',label='LCDM dz rhs')
+plt.plot(np.array(b1),(np.array(b1)-1)*1.686*2,'k--',label=r'$b_{\phi}=2\delta_c(b_1-1)$')
 plt.legend()
-plt.title('separate Universe with AbacusHOD: c000 vs c004    ',fontsize=10)
-plt.savefig('b1_bphi')
+plt.xlabel('linear bias b1')
+plt.ylabel('bphi')
+plt.savefig('evolution_bphi-b1')
 plt.close()
