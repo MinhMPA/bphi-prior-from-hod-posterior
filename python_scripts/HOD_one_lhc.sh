@@ -1,12 +1,13 @@
 #!/bin/bash
 #SBATCH -N 1
-#SBATCH -C cpu
+#SBATCH -C gpu
 #SBATCH -n 1
 #SBATCH -c 32
+#SBATCH --gpus=1
 #SBATCH --mem=120G
 #SBATCH -t 04:00:00
 #SBATCH --qos=regular
-#SBATCH --account=desi
+#SBATCH --account=desi_g
 #SBATCH --array=0-99
 #SBATCH -J lhc_abacushod
 #SBATCH -o logs/%x_%A_%a.out
@@ -14,8 +15,10 @@
 
 source /global/common/software/desi/users/adematti/cosmodesi_environment.sh dr1
 set -euo pipefail
-mkdir -p logs
 
+cd $SCRATCH/b_phi
+mkdir -p logs
+ 
 # -------- inputs ----------
 tracer=$1
 #LRG
@@ -38,7 +41,7 @@ elif [ "$tracer" = "ELG" ]; then
     zsnaps=(0.95 1.325)
 fi
 
-calculator="srun -N 1 -n 1 -c 32 -C cpu --mem=120G -t 04:00:00 --qos interactive --account desi "
+calculator="srun -N 1 -n 1 -C gpu --gpus=1 --qos interactive --account desi_g --mem=120G"
 for i in "${!zmins[@]}"; do
     zmin=${zmins[$i]}
     zmax=${zmaxs[$i]}

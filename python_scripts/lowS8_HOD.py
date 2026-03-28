@@ -13,7 +13,7 @@ tracer = sys.argv[1]
 
 # load the SV3 data
 origin = f'/global/cfs/cdirs/desi/survey/catalogs/edav1/xi/sv3/{{}}'
-rebin=2
+rebin=1#2
 extra = '_nran18_split20'
 weight  = 'default_angular_bitwise_FKP'
 njk     = 128  
@@ -24,9 +24,9 @@ if tracer == 'LRG':
     zmaxs = [0.6,0.8,1.1]
     redshifts=[0.5,0.8,1.1]
 elif tracer == 'ELG':
-    zmins = [0.8,1.1]
-    zmaxs = [1.1,1.6]
-    redshifts=[1.1,1.325]
+    zmins = [1.1]#[0.8,1.1]
+    zmaxs = [1.6]#[1.1,1.6]
+    redshifts=[1.325]#[0.95,1.325]
 elif tracer == 'QSO':
     zmins = [0.8,1.1,1.6,2.1]
     zmaxs = [1.1,1.6,2.1,3.5]
@@ -36,20 +36,28 @@ elif tracer == 'QSO':
 plt.rc('font', family='serif', size=12) 
 for iz,(zmin,zmax,redshift) in enumerate(zip(zmins,zmaxs,redshifts)):
     if tracer == 'QSO':
-        HOD_obj= HOD(param_file=f'../HOD_config/lowS8_HOD_{tracer}.yaml', path_to_abacus_sim='/global/cfs/cdirs/desi/cosmosim/Abacus', **{'hcat':{'z_simu':redshift,'Abacus':{'sim_name':'AbacusSummit_base_c000_ph000','z_simu':redshift}},'QSO':{'vsmear':vsmears[iz]}})
+        HOD_obj= HOD(param_file=f'./HOD_config/lowS8_HOD_{tracer}.yaml', path_to_abacus_sim='/global/cfs/cdirs/desi/cosmosim/Abacus', **{'hcat':{'z_simu':redshift,'Abacus':{'sim_name':'AbacusSummit_base_c000_ph000','z_simu':redshift}},'QSO':{'vsmear':vsmears[iz]}})
     else:
-        HOD_obj= HOD(param_file=f'../HOD_config/lowS8_HOD_{tracer}.yaml', path_to_abacus_sim='/global/cfs/cdirs/desi/cosmosim/Abacus', **{'hcat':{'z_simu':redshift,'Abacus':{'sim_name':'AbacusSummit_base_c000_ph000','z_simu':redshift}}})
+        #HOD_obj= HOD(param_file=f'./HOD_config/hoddies_lowS8_HOD_{tracer}.yaml', path_to_abacus_sim='/global/cfs/cdirs/desi/cosmosim/Abacus', **{'hcat':{'z_simu':redshift,'Abacus':{'sim_name':'AbacusSummit_base_c000_ph000','z_simu':redshift}}})
+        HOD_obj= HOD(param_file=f'./HOD_config/hoddies_ELG.yaml', path_to_abacus_sim='/global/cfs/cdirs/desi/cosmosim/Abacus', \
+                     **{
+                        'ELG': {'M_0': 11.23, 'As': 0.47, 'log_Mcent': 11.67, \
+                                'alpha': 0.85, 'f_sigv': 1.71, 'sigma_M': 0.29, 'gamma': 5.10, \
+                                'exp_frac': 0.55, 'exp_scale': 7.22, 'nfw_rescale': 0.67}, \
+                        'hcat':{'z_simu':redshift,\
+                                'Abacus':{'sim_name':'AbacusSummit_base_c000_ph000','z_simu':redshift}}\
+                        }
+                    )
 
     # Create galaxy mock catalog, First evaluation is slower because it needs to compile jit functions
     cats = HOD_obj.make_mock_cat(fix_seed=None) #return 1 catalogue per tracer 
+    rp, wp = HOD_obj.get_wp(cats, tracers=tracer)
+    s, xi = HOD_obj.get_2PCF(cats, tracers=tracer)
 
     # plot the 2PCF multipoles   
     fig = plt.figure(figsize=(12,4))
     spec = gridspec.GridSpec(nrows=1,ncols=3, left = 0.08,right = 0.98,bottom=0.15,top = 0.96, hspace=0.,wspace=0.28)
     ax = np.empty((1,3), dtype=type(plt.axes))
-
-    rp, wp = HOD_obj.get_wp(cats, tracers=tracer)
-    s, xi = HOD_obj.get_2PCF(cats, tracers=tracer)
 
     rpmin = 0.1
     obsdir = f'{origin.format("rppi/allcounts_")}{{}}_NScomb_{zmin}_{zmax}_{weight}_log_njack{njk}{extra}.npy'
@@ -70,7 +78,7 @@ for iz,(zmin,zmax,redshift) in enumerate(zip(zmins,zmaxs,redshifts)):
     if tracer == 'LRG':
         plt.ylim(105,230)
     elif tracer == 'ELG':
-        plt.ylim(18,85)
+        plt.ylim(0,75)
     plt.xlabel('$r_p$ [$\mathrm{{Mpc}}/h$]')
     plt.ylabel(r'$r_p \cdot w_p(r_p)$ [$\mathrm{{Mpc}}/h$]$^2$')
 
@@ -90,9 +98,11 @@ for iz,(zmin,zmax,redshift) in enumerate(zip(zmins,zmaxs,redshifts)):
     ax[0,1] = fig.add_subplot(spec[0,1])
     plt.errorbar(ss,ss*xi_obs[0],ss*np.sqrt(np.diag(cov))[:len(ss)],ls='none',marker='o',color='k',ecolor='k')
     plt.plot(s,s*xi[0], label='l=0')
-    plt.xlim(0.1,30)
     plt.xscale('log')
-    if tracer == 'QSO':plt.ylim(-1,15)
+    if tracer == 'QSO':
+        plt.ylim(-1,15)
+    elif tracer == 'ELG':
+        plt.ylim(0.1,11)
     plt.xlim(smin,30)
     plt.xlabel('$s$ [$\mathrm{{Mpc}}/h$]')
     plt.ylabel(r'$s \cdot \xi_{\ell}(s)$ [$\mathrm{{Mpc}}/h$]')
@@ -102,7 +112,10 @@ for iz,(zmin,zmax,redshift) in enumerate(zip(zmins,zmaxs,redshifts)):
     plt.errorbar(ss,ss*xi_obs[1],ss*np.sqrt(np.diag(cov))[len(ss):],ls='none',marker='o',color='k',ecolor='k')
     plt.plot(s,s*xi[1], label='l=2')
     plt.xlim(smin,30)
-    if tracer == 'QSO':plt.ylim(-10,40)
+    if tracer == 'QSO':
+        plt.ylim(-10,40)
+    elif tracer == 'ELG':
+        plt.ylim(-2,29)
     plt.xscale('log')
     plt.xlabel('$s$ [$\mathrm{{Mpc}}/h$]')
     plt.ylabel(r'$s \cdot \xi_{\ell}(s)$ [$\mathrm{{Mpc}}/h$]')

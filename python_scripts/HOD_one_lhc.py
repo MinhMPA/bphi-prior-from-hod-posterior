@@ -2,7 +2,7 @@
 import os, sys
 import numpy as np
 
-from b_phi.HOD_LHC import HOD_lhc  
+from HOD_LHC import HOD_lhc  
 from HOD_utils import load_config, compute_all, compute_wpmps, HOD_plot
 
 def main():
@@ -29,6 +29,15 @@ def main():
     zdir = f"{zsnap:.3f}"
 
     for cosmo in cosmos:
+        # Make output unique per realization (so array jobs don't collide)
+        outdir = f"{dir_source}/mocks_lhc/{tracer}_z{zdir}_c{cosmo}"
+        os.makedirs(outdir, exist_ok=True)
+        done_flag = os.path.join(outdir, f"id{hod_id+1:03d}_2pt_RSD.txt")
+        
+        if os.path.exists(done_flag):
+            print(f"Already done: {done_flag}")
+            continue
+
         if tracer == 'LRG':
             from abacusnbody.hod.abacus_hod import AbacusHOD
 
@@ -42,16 +51,6 @@ def main():
             clustering_params = config.get("clustering_params", {})
             nthread = int(config.get("nthread", 32))
 
-            # Make output unique per realization (so array jobs don't collide)
-            outdir = f"{dir_source}/mocks_lhc/{tracer}_z{zdir}_c{cosmo}"
-            os.makedirs(outdir, exist_ok=True)
-
-            done_flag = os.path.join(outdir, f"id{hod_id+1:03d}_pk_RSD.npy")
-            
-            if os.path.exists(done_flag):
-                print(f"Already done: {done_flag}")
-                continue
-
             # Fresh process + fresh AbacusHOD per task = safest against segfault accumulation
             ball_profiles = AbacusHOD(sim_params, HOD_params, clustering_params)
 
@@ -62,18 +61,29 @@ def main():
                 ball_profiles.tracers[tracer][names[k]] = p
 
             mock = compute_all(ball_profiles, nthread=nthread, out=False, verbose=True)
-            compute_wpmps(mock, sbins, zsnap, outdir, f"id{hod_id+1:03d}")
+            Ngal = len(mock[tracer]['x'])
         elif tracer == 'ELG':
+            sys.path.append('/global/homes/j/jiaxi/codes/HODDIES')
+            from HODDIES import HOD
+            # Apply LHC params
+            ELG_params = {}
+            ELG_params[tracer] = {names[k]: (0.01 if p <= 0.01 else p) for k, p in enumerate(theta)}
+            ELG_params['hcat'] = {'z_simu':zsnap,
+                                    'Abacus':{'sim_name':f'AbacusSummit_base_c{cosmo}_ph000','z_simu':zsnap}}
+            HOD_obj= HOD(param_file=f'./HOD_config/hoddies_ELG.yaml', path_to_abacus_sim='/global/cfs/cdirs/desi/cosmosim/Abacus', \
+                        **ELG_params)
+            # generate mock and clustering
+            mock = HOD_obj.make_mock_cat(fix_seed=600) 
+            Ngal = len(mock['x'])
 
-        
-            
+        compute_wpmps(mock, sbins, zsnap, tracer=tracer, output=outdir, fn=f"id{hod_id+1:03d}")
         # Save plot/output (uses your helper)
-        HOD_plot(tracer, zmin, zmax, sbins, outdir, f"_id{hod_id+1:03d}")
+        HOD_plot(tracer, zmin, zmax, sbins, output=outdir, ihod=f"_id{hod_id+1:03d}")
 
         # Append results (safe enough for small scale; for heavy concurrency use per-task files)
         results_fn = f"{dir_source}/bphi_results_AbacusHOD.txt"
         with open(results_fn, "a") as f:
-            f.write(f"{tracer} {zsnap:.3f} {cosmo} {hod_id+1} {len(mock[tracer]['x'])}\n")
+            f.write(f"{tracer} {zsnap:.3f} {cosmo} {hod_id+1} {Ngal}\n")
 
         print(f"Completed id={hod_id+1} -> {outdir}")
 

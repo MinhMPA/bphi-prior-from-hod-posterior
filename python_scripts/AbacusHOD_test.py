@@ -22,7 +22,7 @@ def compute_all(Ball, nthread, out=False, verbose = False):
     #clustering = Ball.compute_multipole(mock_dict, rpbins=Ball.rpbins, pimax=Ball.pimax, sbins=Ball.rpbins, nbins_mu=200, Nthread = nthread)    
     return mock_dict#,clustering
 
-def compute_wpmps(mock,bins,z):
+def compute_wpmps(mock,bins,z, tracer='LRG',output='./',fn=None):
     boxsize = 2000
     mu_max  = 1
     nmu     = 200
@@ -33,16 +33,25 @@ def compute_wpmps(mock,bins,z):
     H = 100*np.sqrt(Om*(1+z)**3+Ode)
     from pycorr import TwoPointCorrelationFunction, project_to_multipoles, project_to_wp
 
-    data_positions = np.array([mock['LRG']['x']%boxsize,mock['LRG']['y']%boxsize,(mock['LRG']['z'])%boxsize])#+mock['LRG']['vz']*(1+z)/H)%boxsize])
+    data_positions = np.array([mock['LRG']['x']%boxsize,mock['LRG']['y']%boxsize,(mock['LRG']['z'])%boxsize])
     result_smu = TwoPointCorrelationFunction('smu', (bins,np.linspace(-mu_max,mu_max,nmu+1)), data_positions1=data_positions,
                             engine='corrfunc', position_type = 'xyz',D1D2 = None,R1R2 = None, los='z',nthreads=4,boxsize=boxsize)
     _,xi = project_to_multipoles(result_smu,ells=[0,2])
     result_rppi= TwoPointCorrelationFunction('rppi', (bins,np.linspace(-pimax,pimax,pimax*2+1)), data_positions1=data_positions,
                             engine='corrfunc', position_type = 'xyz',D1D2 = None,R1R2 = None, los='z',nthreads=4,boxsize=boxsize)
     _,wp = project_to_wp(result_rppi, pimax=40)
+    np.savetxt(f'{output}/{fn}_2pt_RSD.txt',np.array([(bins[1:]+bins[:-1])/2,bins[:-1],bins[1:],xi[0],xi[1],wp]).T,header='smid smin smax xi0 xi2 wp')
+
+    # compute real-space power spectra for galaxy bias
+    from pypower import CatalogFFTPower
+    power = CatalogFFTPower(data_positions1=data_positions,
+                            position_type='xyz',resampler='tsc', interlacing=3, edges={'step': 0.001}, \
+                            boxsize=boxsize,cellsize=10, mpiroot=0, ells=(0,2), nmesh=128, los='z')
+    power.save(f'{output}/{fn}_pk_RSD')
+
     return xi[0],xi[1],wp
 
-def HOD_plot(tracer,zmin,zmax,sbins,clustering,ihod=''):
+def HOD_plot(tracer,zmin,zmax,sbins,output='./',ihod=''):
     origin  = f'/global/cfs/cdirs/desi/survey/catalogs/edav1/xi/sv3/{{}}'
     rebin   = 2
     galcomb = 'NScomb'
@@ -53,6 +62,8 @@ def HOD_plot(tracer,zmin,zmax,sbins,clustering,ihod=''):
     smax    = 32
     smid  = (sbins[1:]+sbins[:-1])/2
     s_sel =(smin<smid)&(smid<smax)
+    clustering = np.loadtxt(f'{output}/{ihod[1:]}_2pt_RSD.txt',usecols=(3,4,5),unpack=True)
+
     # plot the 2PCF multipoles
     if tracer == 'LRG':   
         obsdir = f'{origin}{tracer}_main_{galcomb}_{zmin}_{zmax}_{weight}_log{rebin}_njack{njk}{extra}.txt'
@@ -104,7 +115,23 @@ def HOD_plot(tracer,zmin,zmax,sbins,clustering,ihod=''):
     plt.xlabel('$s$ [$\mathrm{{Mpc}}/h$]')
     plt.ylabel(r'$s \cdot \xi_{\ell}(s)$ [$\mathrm{{Mpc}}/h$]')
     plt.legend()
-    plt.savefig(f'xiwp_{tracer}_z{zmin}z{zmax}{ihod}.png')
+    plt.savefig(f'{output}/xiwp_{tracer}_z{zmin}z{zmax}{ihod}.png')
+    plt.close()
+
+    from pypower import PowerSpectrumMultipoles
+    result = PowerSpectrumMultipoles.load(f'{output}/{ihod[1:]}_pk_RSD.npy')
+    result = result.select((0.01,0.2))
+    fig,ax=plt.subplots()
+    for ill, ell in enumerate(result.ells):
+        sep,tpt = result(ell=ell, return_k=True, complex=False)
+        ax.plot(sep,sep*tpt, label=r'$\ell = {:d}$'.format(ell))
+    ax.legend()
+    ax.grid(True)
+    ax.set_xlabel(r'$k$ [$h/\mathrm{Mpc}$]')
+    ax.set_ylabel(r'$k*P(k)$')
+    plt.ylim(-200,1500)
+
+    plt.savefig(f'{output}/pk_{tracer}_z{zmin}z{zmax}{ihod}.png')
     plt.close()
 
 if __name__ == "__main__":

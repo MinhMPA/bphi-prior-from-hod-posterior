@@ -1,12 +1,7 @@
 import sys,os
 import numpy as np
 import pandas as pd
-import yaml
 import matplotlib.pyplot as plt
-from abacusnbody.hod.abacus_hod import AbacusHOD
-from abacusnbody.hod.GRAND_HOD import *
-from abacusnbody.hod.utils import setup_logging
-from AbacusHOD_test import *
 
 def HOD_lhc(tracer, redshift, N_samples):
     from scipy.stats import qmc, norm
@@ -61,7 +56,7 @@ def HOD_lhc(tracer, redshift, N_samples):
         if redshift == 0.95:
             bounds = {
                 "M_0":     (11.1, 0.05),
-                "A_s":     (0.38, 0.04),
+                "As":      (0.38, 0.04),
                 "log_Mcent":(11.62,0.04),
                 "alpha":   (0.74, 0.07),
                 "f_sigv":  (1.71, 0.14),
@@ -74,7 +69,7 @@ def HOD_lhc(tracer, redshift, N_samples):
         elif redshift == 1.325:
             bounds = {
                 "M_0":     (11.23, 0.16),
-                "A_s":     (0.47, 0.13),
+                "As":      (0.47, 0.13),
                 "log_Mcent":(11.67,0.04),
                 "alpha":   (0.85, 0.10),
                 "f_sigv":  (1.71, 0.20),
@@ -185,6 +180,4 @@ if __name__ == "__main__":
         df_lhc, n_params = HOD_lhc(tracer, zsnap, N_lhc)  # the LHC generator
         theta_params = df_lhc.loc[:N_lhc-1, n_params].to_numpy()
         my_indices = [i for i in range(N_lhc)]
-    
-    # compute bphi
-    
+        
