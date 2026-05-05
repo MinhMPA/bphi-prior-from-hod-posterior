@@ -12,6 +12,9 @@ PK_DIR = ROOT / "bphi_prior" / "pk"
 COV_DIR = ROOT / "bphi_prior" / "cov"
 PLOT_DIR = ROOT / "bphi_prior" / "plots"
 BAOCOV_FILE = ROOT.parent / "PFS_mock-tests" / "baocov.py"
+PNG_MOCK_DIR = ROOT / "mocks_lhc_PNG"
+SIMTYPES = ("SU", "PNG")
+BOXSIZE = 2000.0
 
 
 def ensure_dir(path):
@@ -23,35 +26,107 @@ def ztag(zsnap):
     return f"{zsnap:.3f}"
 
 
-def pk_path(tracer, zsnap, cosmo="000"):
-    return PK_DIR / f"pk_{tracer}_z{ztag(zsnap)}_c{cosmo}.npy"
+def su_text_pk_path(tracer, zsnap, cosmo="000"):
+    return PK_DIR / f"pk_{tracer}_z{ztag(zsnap)}_c{cosmo}.txt_pypower"
 
 
-def cov_path(tracer, zsnap, cosmo="000"):
-    return COV_DIR / f"cov_{tracer}_z{ztag(zsnap)}_c{cosmo}.npy"
+def png_mock_pk_path(tracer, zsnap, cosmo="000"):
+    return PNG_MOCK_DIR / f"{tracer}_z{ztag(zsnap)}_c{cosmo}_default_pk_RSD.npy"
 
 
-def load_pk(tracer, zsnap, cosmo="000"):
-    from pypower import MeshFFTPower, PowerSpectrumMultipoles
+def pk_path(tracer, zsnap, cosmo="000", simtype="SU"):
+    if simtype == "SU":
+        return su_text_pk_path(tracer, zsnap, cosmo=cosmo)
+    if simtype == "PNG":
+        return png_mock_pk_path(tracer, zsnap, cosmo=cosmo)
+    raise ValueError(f"Unknown simtype '{simtype}'. Choices are {SIMTYPES}.")
 
-    state = np.load(pk_path(tracer, zsnap, cosmo=cosmo), allow_pickle=True)[()]
-    if "_projs" in state:
-        poles = PowerSpectrumMultipoles.from_state(state)
-    else:
-        result = MeshFFTPower.from_state(state)
-        poles = result.poles if hasattr(result, "poles") else PowerSpectrumMultipoles.from_state(state)
 
-    attrs = getattr(poles, "attrs", {})
-    poles = poles.select((0.0, 0.1))
+def cov_path(tracer, zsnap, cosmo="000", simtype="SU"):
+    if simtype == "SU":
+        return COV_DIR / f"cov_{tracer}_z{ztag(zsnap)}_c{cosmo}.npy"
+    if simtype == "PNG":
+        return COV_DIR / f"cov_PNG_{tracer}_z{ztag(zsnap)}_c{cosmo}.npy"
+    raise ValueError(f"Unknown simtype '{simtype}'. Choices are {SIMTYPES}.")
+
+
+def load_su_text_pk(path):
+    header = {}
+    with open(path, "r", encoding="utf-8") as stream:
+        for line in stream:
+            if not line.startswith("#"):
+                break
+            content = line[1:].strip()
+            if "=" in content:
+                key, value = [item.strip() for item in content.split("=", 1)]
+                header[key] = value
+
+    nmodes, _, k, pk0 = np.loadtxt(path, unpack=True)
+    data_size = float(header.get("data_size1", header.get("data_size", 0.0)))
+    shotnoise = float(header.get("shotnoise", 0.0))
+    return {
+        "k": np.asarray(k, dtype="f8"),
+        "pk0": np.asarray(pk0, dtype="f8"),
+        "nmodes": np.asarray(nmodes, dtype="f8"),
+        "shotnoise": shotnoise,
+        "nbar": data_size / BOXSIZE**3,
+        "boxsize": BOXSIZE,
+    }
+
+
+def load_png_rebinned_pk(path, kmin=0.0, kmax=0.1, dk=0.002):
+    state = np.load(path, allow_pickle=True)[()]
+    poles = state["poles"]
+    attrs = poles["attrs"]
+    edges = np.asarray(poles["edges"][0], dtype="f8")
+    nmodes_fine = np.asarray(poles["nmodes"], dtype="f8")
+    power_nonorm = np.asarray(poles["power_nonorm"], dtype=np.complex128)
+    ells = tuple(poles["ells"])
+    wnorm = float(poles["wnorm"])
+    shotnoise = float(poles["shotnoise_nonorm"]) / wnorm
+
+    try:
+        ell0_index = ells.index(0)
+    except ValueError as exc:
+        raise ValueError(f"Could not find ell=0 in PNG P(k) file {path}. Available ells are {ells}.") from exc
+
+    pk0_fine = power_nonorm[ell0_index].real / wnorm
+    fine_centers = 0.5 * (edges[:-1] + edges[1:])
+    target_edges = np.arange(kmin, kmax + dk / 2.0, dk)
+    target_k = np.full(target_edges.size - 1, np.nan, dtype="f8")
+    target_pk0 = np.full(target_edges.size - 1, np.nan, dtype="f8")
+    target_nmodes = np.zeros(target_edges.size - 1, dtype="f8")
+
+    for ibin in range(target_edges.size - 1):
+        lo, hi = target_edges[ibin], target_edges[ibin + 1]
+        mask = (fine_centers >= lo) & (fine_centers < hi) & np.isfinite(pk0_fine) & (nmodes_fine > 0)
+        if not np.any(mask):
+            continue
+        weights = nmodes_fine[mask]
+        target_k[ibin] = np.average(fine_centers[mask], weights=weights)
+        target_pk0[ibin] = np.average(pk0_fine[mask], weights=weights)
+        target_nmodes[ibin] = np.sum(weights)
+
+    if np.any(~np.isfinite(target_pk0)):
+        missing = np.where(~np.isfinite(target_pk0))[0]
+        raise ValueError(f"Missing rebinned PNG P(k) bins for {path}: target bin indices {missing.tolist()}")
+
     data_size = float(attrs.get("data_size1", attrs.get("data_size", 0.0)))
     return {
-        "k": np.asarray(poles.modeavg(), dtype="f8"),
-        "pk0": np.asarray(poles(ell=0, complex=False), dtype="f8"),
-        "nmodes": np.asarray(poles.nmodes, dtype="f8"),
-        "shotnoise": float(poles.shotnoise),
-        "nbar": data_size / 2000.0**3,
-        "boxsize": 2000.0,
+        "k": target_k,
+        "pk0": target_pk0,
+        "nmodes": target_nmodes,
+        "shotnoise": shotnoise,
+        "nbar": data_size / BOXSIZE**3,
+        "boxsize": BOXSIZE,
     }
+
+
+def load_pk(tracer, zsnap, cosmo="000", simtype="SU"):
+    path = pk_path(tracer, zsnap, cosmo=cosmo, simtype=simtype)
+    if simtype == "SU":
+        return load_su_text_pk(path)
+    return load_png_rebinned_pk(path)
 
 
 def load_pk_var():
@@ -61,10 +136,10 @@ def load_pk_var():
     return module.pk_var
 
 
-def plot_one(tracer, zsnap, cosmo="000"):
+def plot_one(tracer, zsnap, cosmo="000", simtype="SU", skip_first_bin=True):
     ensure_dir(PLOT_DIR)
-    pk_data = load_pk(tracer, zsnap, cosmo=cosmo)
-    covariance = np.load(cov_path(tracer, zsnap, cosmo=cosmo))
+    pk_data = load_pk(tracer, zsnap, cosmo=cosmo, simtype=simtype)
+    covariance = np.load(cov_path(tracer, zsnap, cosmo=cosmo, simtype=simtype))
     pk_var = load_pk_var()
     k = np.asarray(pk_data["k"], dtype="f8")
     pk0 = np.asarray(pk_data["pk0"], dtype="f8")
@@ -76,6 +151,12 @@ def plot_one(tracer, zsnap, cosmo="000"):
     analytic_var = pk_var(nbar=nbar, kmid=k, P0=pk0, boxsize=boxsize, dk=dk)
     measured_var = np.diag(covariance)
     exact_bin_var = 2.0 * (pk0 + 1.0 / nbar) ** 2 / nmodes
+    plot_slice = slice(1, None) if skip_first_bin else slice(None)
+    k = k[plot_slice]
+    pk0 = pk0[plot_slice]
+    analytic_var = analytic_var[plot_slice]
+    measured_var = measured_var[plot_slice]
+    exact_bin_var = exact_bin_var[plot_slice]
 
     fig, axes = plt.subplots(3, 1, figsize=(7, 10), sharex=True)
 
@@ -101,10 +182,10 @@ def plot_one(tracer, zsnap, cosmo="000"):
     axes[2].grid(True)
     axes[2].legend()
 
-    title = f"{tracer} z={zsnap:.3f} cosmo={cosmo}"
+    title = f"{simtype} {tracer} z={zsnap:.3f} cosmo={cosmo}"
     fig.suptitle(title)
     fig.tight_layout()
-    output = PLOT_DIR / f"pk_var_compare_{tracer}_z{ztag(zsnap)}_c{cosmo}.png"
+    output = PLOT_DIR / f"pk_var_compare_{simtype}_{tracer}_z{ztag(zsnap)}_c{cosmo}.png"
     fig.savefig(output, dpi=150)
     plt.close(fig)
     return output
@@ -114,11 +195,19 @@ def main():
     parser = argparse.ArgumentParser(description="Plot P(k) and compare variance with baocov.pk_var.")
     parser.add_argument("--tracer", default="LRG")
     parser.add_argument("--zsnaps", nargs="*", type=float, default=[0.5, 0.8, 1.1])
+    parser.add_argument("--simtype", default="SU", choices=SIMTYPES)
     parser.add_argument("--cosmo", default="000")
+    parser.add_argument("--include-first-bin", action="store_true")
     args = parser.parse_args()
 
     for zsnap in args.zsnaps:
-        output = plot_one(args.tracer, zsnap, cosmo=args.cosmo)
+        output = plot_one(
+            args.tracer,
+            zsnap,
+            cosmo=args.cosmo,
+            simtype=args.simtype,
+            skip_first_bin=not args.include_first_bin,
+        )
         print(f"Saved {output}")
 
 
