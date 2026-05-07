@@ -1,0 +1,72 @@
+# b_phi Work Summary (Yesterday)
+
+## Goal
+Focused on debugging and stabilizing the PNG/bphi prior fitting workflow, improving diagnostics/plots, and preparing a clean path to include physically motivated `b1` truth markers in triangle plots.
+
+## Main Pipeline and Fitting Updates
+- Simplified `bphi_prior_pipeline.sh` so it is mode-driven and automatically runs both **with** and **without** bphi priors (except unsupported combinations).
+- Added/cleaned debug-fit behavior for separate redshift fits (`z = 0.5, 0.8, 1.1`) and separate output directories via `BPHI_FIT_DIR`.
+- Fixed data/covariance truncation handling in `bphi_prior_pipeline.py` where fitting slice logic was inconsistent.
+- Ensured debug runs now produce the same analysis artifacts as ordinary runs:
+  - triangle plots
+  - profiler stats
+  - chain stats
+
+## Priors and Likelihood Logic
+- Reviewed desilike PNG parameter priors for `b-p`, `bfnl`, and `bphi` modes from source.
+- Updated flat-prior handling to use absolute limits consistently (`FLAT_PRIORS` usage cleanup).
+- Updated z=1.1 bphi prior center/width in the pipeline:
+  - `N(1.99211960, 1.2898^2)` for bphi prior usage.
+- Implemented combined-prior treatment for the required case:
+  - `mode == "bfnl"` and `use_bphi_prior == True`.
+- Added a custom combined prior term that supports `bphi * fnl` consistency in the `bfnl` workflow.
+- Changed `bphi_best` behavior to use the **first LHC bphi entry** (central/reference entry), not the mean over all LHC bphi values.
+
+## Triangle Plot and Diagnostics Improvements
+- Added MAP and ML extraction/saving helpers for robust reuse in plots.
+- Joint and single triangle plots now overlay both:
+  - ML point
+  - MAP point
+  with distinct markers.
+- Maintained consistent posterior colors for with/without bphi prior while using different marker styles for MAP/ML.
+- Removed non-essential text annotations on triangle figures (kept contour labels only, as requested).
+- Added black truth lines for:
+  - true `fnl_loc` (from `TRUE_FNL_LOC_BY_COSMO`)
+  - derived `bphi * fnl_loc`
+  - `b1` (when provided in bphi stats file)
+- Improved problematic `c301` no-prior plotting behavior by using more conservative chain selection defaults (burn-in/thinning controls) to stabilize contour appearance without degrading `c000`/`c300`.
+
+## Desilike Source/Model Understanding
+- Located and checked desilike PNG implementation and defaults:
+  - PNG model mode behavior (`bphi`, `b-p`, `bfnl`)
+  - parameter prior defaults (`fnl_loc`, `bphi`, `bfnl_loc`, `p`, `b1`, `sigmas`, `sn0`)
+- Clarified `sigmas` and `sn0` roles in the PNG tracer model context for fit interpretation.
+
+## HOD / b1 Preparation Work
+- Added a debug script path for:
+  - `HOD_one_lhc.sh`
+  - `tracer == LRG`
+  - `zsnaps=(0.95)`
+  - config `/pscratch/sd/j/jiaxi/b_phi/HOD_config/abacushod_z0.950_c000.yaml`
+- Implemented optional `b1`-computation support integrated into HOD workflow:
+  - real-space `P(k)` used for linear-bias estimate
+  - RSD clustering products (`wp`, `xi0`, `xi2`, and RSD `Pk`) kept for standard outputs
+- Extended bphi table parsing/writing to accept an optional `b1` column and made pipeline loading robust to missing/NaN entries.
+
+## Files Most Actively Updated
+- `b_phi/bphi_prior_pipeline.py`
+- `b_phi/bphi_prior_pipeline.sh`
+- `b_phi/bphi_prior_fit_debug.sh`
+- `b_phi/HOD_one_lhc.py`
+- `b_phi/HOD_one_lhc.sh`
+- `b_phi/HOD_utils.py`
+- `b_phi/HOD_bphi.py`
+- `b_phi/HOD_one_lhc_LRG_z095_debug.sh`
+
+## Current Status: 7 May 2026
+- Core fitting/debug pipeline is functional with enhanced diagnostics and clearer prior-handling behavior.
+  - Combined `bfnl + bphi-prior` logic is in place for your required simultaneous mode/prior configuration.
+  - desilike `bfnl` pipeline is wrong, fixing it
+  - Joint/single posterior visualization now includes ML/MAP markers and truth-reference overlays.
+- HOD-side `b1` integration path is implemented and ready for production compute runs.
+  - abacushod updated, so creating the new catalogues again
