@@ -1,7 +1,26 @@
 import numpy as np
 import yaml
+import os
+from functools import lru_cache
+from pathlib import Path
 from abacusnbody.hod.GRAND_HOD import *
 from abacusnbody.hod.utils import setup_logging
+
+DEFAULT_NFW_DRAW_PATH = Path(__file__).resolve().parent / "archive/chains_ELG/data/nfw.npy"
+
+
+@lru_cache(maxsize=4)
+def load_nfw_draw(nfw_draw_path=None):
+    path = Path(
+        nfw_draw_path
+        or os.environ.get("ABACUSHOD_NFW_DRAW", DEFAULT_NFW_DRAW_PATH)
+    ).expanduser()
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Missing NFW draw file: {path}. Set ABACUSHOD_NFW_DRAW to a valid nfw.npy."
+        )
+    return np.load(path)
+
 
 def load_config(config_path):
     try:
@@ -11,9 +30,24 @@ def load_config(config_path):
     except Exception as e:
         raise RuntimeError(f"Error loading configuration file '{config_path}': {e}") 
 
-def compute_all(Ball, nthread, out=False, verbose = False):
+def compute_all(Ball, nthread, out=False, verbose=False, want_rsd=None,
+                want_nfw=None, NFW_draw=None, nfw_draw_path=None):
     setup_logging()
-    mock_dict = Ball.run_hod(tracers=Ball.tracers, want_rsd=Ball.want_rsd, Nthread = nthread, verbose = verbose, write_to_disk=out)
+    if want_rsd is None:
+        want_rsd = Ball.want_rsd
+    if want_nfw is None:
+        want_nfw = getattr(Ball, "z_type", None) == "secondary"
+    if want_nfw and NFW_draw is None:
+        NFW_draw = load_nfw_draw(nfw_draw_path)
+    mock_dict = Ball.run_hod(
+        tracers=Ball.tracers,
+        want_rsd=want_rsd,
+        want_nfw=want_nfw,
+        NFW_draw=NFW_draw,
+        Nthread=nthread,
+        verbose=verbose,
+        write_to_disk=out,
+    )
     return mock_dict
 
 def compute_wpmps(mock, bins, z, tracer='LRG', output='./', fn=None):
@@ -42,7 +76,7 @@ def compute_wpmps(mock, bins, z, tracer='LRG', output='./', fn=None):
     _,wp = project_to_wp(result_rppi, pimax=40)
     np.savetxt(f'{output}/{fn}_2pt_RSD.txt',np.array([(bins[1:]+bins[:-1])/2,bins[:-1],bins[1:],xi[0],xi[1],wp]).T,header='smid smin smax xi0 xi2 wp')
 
-    # compute real-space power spectra for galaxy bias
+    # Existing diagnostic P(k) output used by the plotting helper below.
     if tracer == 'LRG':
         fn_pk = f'{output}/{fn}_pk_RSD'
     elif tracer == 'ELG':
@@ -55,6 +89,67 @@ def compute_wpmps(mock, bins, z, tracer='LRG', output='./', fn=None):
     power.save(fn_pk)
 
     return xi[0],xi[1],wp
+
+def mock_real_space_positions(mock, tracer='LRG', boxsize=2000):
+    if isinstance(mock, dict) and tracer in mock and isinstance(mock[tracer], dict):
+        catalog = mock[tracer]
+    else:
+        catalog = mock
+    return np.array([
+        np.asarray(catalog['x']) % boxsize,
+        np.asarray(catalog['y']) % boxsize,
+        np.asarray(catalog['z']) % boxsize,
+    ])
+
+def compute_real_space_pk(mock, tracer='LRG', output='./', fn=None, boxsize=2000,
+                          edges_step=0.005, cellsize=10, nmesh=128):
+    import os
+    from pypower import CatalogFFTPower
+    os.makedirs(output, exist_ok=True)
+    if fn is None:
+        fn = tracer
+    fn_pk = f'{output}/{fn}_pk_real'
+    data_positions = mock_real_space_positions(mock, tracer=tracer, boxsize=boxsize)
+    power = CatalogFFTPower(data_positions1=data_positions,
+                            position_type='xyz', resampler='tsc', interlacing=3,
+                            edges={'step': edges_step}, boxsize=boxsize,
+                            cellsize=cellsize, mpiroot=0, ells=(0,), nmesh=nmesh, los='z')
+    power.save(fn_pk)
+    return fn_pk
+
+def estimate_linear_bias_from_pk(fn_pk, z, kmin=0.01, kmax=0.05):
+    from cosmoprimo import Fourier
+    from cosmoprimo.fiducial import AbacusSummit
+    from pypower import PowerSpectrumMultipoles
+
+    path = str(fn_pk)
+    if not path.endswith('.npy'):
+        path = path + '.npy'
+    power = PowerSpectrumMultipoles.load(path)
+    kvals, pk_gal = power(return_k=True, complex=False, ell=0)
+    mask = (kmin < kvals) & (kvals < kmax)
+    if not np.any(mask):
+        raise ValueError(f'No P(k) bins in b1 range {kmin} < k < {kmax}.')
+
+    pk_interp = Fourier(AbacusSummit(), engine='class').pk_interpolator()
+    pk_matter = pk_interp(kvals[mask], z=z)
+    ratio = np.asarray(pk_gal[mask]) / np.asarray(pk_matter)
+    ratio = ratio[np.isfinite(ratio) & (ratio > 0.)]
+    if ratio.size == 0:
+        raise ValueError(f'No finite positive Pgal/Pmatter ratios in {kmin} < k < {kmax}.')
+    return float(np.sqrt(np.mean(ratio)))
+
+def compute_linear_bias(mock, z, tracer='LRG', output='./', fn=None,
+                        kmin=0.01, kmax=0.05, boxsize=2000,
+                        edges_step=0.005, cellsize=10, nmesh=128):
+    fn_pk = compute_real_space_pk(mock, tracer=tracer, output=output, fn=fn,
+                                  boxsize=boxsize, edges_step=edges_step,
+                                  cellsize=cellsize, nmesh=nmesh)
+    b1 = estimate_linear_bias_from_pk(fn_pk, z=z, kmin=kmin, kmax=kmax)
+    with open(f'{output}/{fn}_b1.txt', 'w') as stream:
+        stream.write('# tracer zsnap kmin kmax b1 pk_file\n')
+        stream.write(f'{tracer} {z:.3f} {kmin:.6g} {kmax:.6g} {b1:.8f} {fn_pk}.npy\n')
+    return b1
 
 def HOD_plot(tracer,zmin,zmax,sbins,output='./',ihod=''):
     import matplotlib.pyplot as plt

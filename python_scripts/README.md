@@ -1,4 +1,4 @@
-# b_phi Work Summary (Yesterday)
+# b_phi Work Summary (through 8 May 2026)
 
 ## Goal
 Focused on debugging and stabilizing the PNG/bphi prior fitting workflow, improving diagnostics/plots, and preparing a clean path to include physically motivated `b1` truth markers in triangle plots.
@@ -53,6 +53,19 @@ Focused on debugging and stabilizing the PNG/bphi prior fitting workflow, improv
   - RSD clustering products (`wp`, `xi0`, `xi2`, and RSD `Pk`) kept for standard outputs
 - Extended bphi table parsing/writing to accept an optional `b1` column and made pipeline loading robust to missing/NaN entries.
 
+## AbacusHOD Runtime Update
+- Diagnosed the `bash HOD_one_lhc.sh 0 SU` failure from AbacusHOD:
+  - `z_mock = 0.950` is treated as a secondary redshift by AbacusHOD.
+  - secondary redshift snapshots do not have particle position/velocity subsample outputs.
+  - AbacusHOD therefore requires NFW satellite placement for this redshift.
+- Updated `HOD_utils.compute_all()` so secondary-redshift `AbacusHOD` objects automatically run with:
+  - `want_nfw=True`
+  - `NFW_draw` loaded from `archive/chains_ELG/data/nfw.npy`
+- Added `ABACUSHOD_NFW_DRAW` as an environment override for using a different `nfw.npy`.
+- Kept the user-facing HOD command unchanged:
+  - `bash HOD_one_lhc.sh 0 SU`
+- Verified the wrapper behavior with `py_compile` and a lightweight mock `run_hod` test; full `srun` production rerun is still the next runtime validation.
+
 ## Files Most Actively Updated
 - `b_phi/bphi_prior_pipeline.py`
 - `b_phi/bphi_prior_pipeline.sh`
@@ -63,10 +76,11 @@ Focused on debugging and stabilizing the PNG/bphi prior fitting workflow, improv
 - `b_phi/HOD_bphi.py`
 - `b_phi/HOD_one_lhc_LRG_z095_debug.sh`
 
-## Current Status: 7 May 2026
+## Current Status: 8 May 2026
 - Core fitting/debug pipeline is functional with enhanced diagnostics and clearer prior-handling behavior.
   - Combined `bfnl + bphi-prior` logic is in place for your required simultaneous mode/prior configuration.
-  - desilike `bfnl` pipeline is wrong, fixing it
+  - desilike `bfnl` pipeline still needs follow-up validation/fixing.
   - Joint/single posterior visualization now includes ML/MAP markers and truth-reference overlays.
 - HOD-side `b1` integration path is implemented and ready for production compute runs.
-  - abacushod updated, so creating the new catalogues again
+  - AbacusHOD secondary-redshift handling is now patched for `z = 0.950` via automatic NFW fallback.
+  - Next step is to rerun the SU/PNG HOD catalog production and collect the new `b1` outputs.

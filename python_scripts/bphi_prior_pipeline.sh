@@ -1,21 +1,54 @@
 #!/bin/bash
 source /global/common/software/desi/users/adematti/cosmodesi_environment.sh main
-
-if false; then
-# get the pk measurements, analytical covariance and visually confirm it
-python bphi_prior_pipeline.py pk --simtype SU --tracer LRG --zsnaps 0.5 0.8 1.1
-python bphi_prior_pipeline.py cov --simtype SU --tracer LRG --zsnaps 0.5 0.8 1.1
-python bphi_prior_plot_pk.py --simtype SU --tracer LRG --zsnaps 0.5 0.8 1.1
-# fit the PNG parameters with and without bphi priors
-srun -N 1 -C cpu -n 1 -c 32 --mem=120G -t 02:00:00 --qos interactive --account desi python bphi_prior_pipeline.py fit --simtype SU --tracer LRG --zsnaps 0.5 0.8 1.1 --mode bphi --run-sampler --kmin 0.006 --with-bphi-prior --kmin 0.006
-srun -N 1 -C cpu -n 1 -c 32 --mem=120G -t 02:00:00 --qos interactive --account desi python bphi_prior_pipeline.py fit --simtype SU --tracer LRG --zsnaps 0.5 0.8 1.1 --mode bphi --run-sampler --kmin 0.006
+source activate bfnl
+export PYTHONNOUSERSITE=1
+export DESILIKE_LOCAL_PATH=/global/homes/j/jiaxi/codes/desilike
+export PYTHONPATH=${DESILIKE_LOCAL_PATH}:$PYTHONPATH
+# Guard against old sessions leaking the wrong local tree.
+if [[ "${PYTHONPATH}" == *"/global/homes/j/jiaxi/codes_mine/desilike"* ]]; then
+    export PYTHONPATH="${PYTHONPATH//:\/global\/homes\/j\/jiaxi\/codes_mine\/desilike/}"
+    export PYTHONPATH="${PYTHONPATH//\/global\/homes\/j\/jiaxi\/codes_mine\/desilike:/}"
 fi
+#
+set -euo pipefail
 
-# PNG mocks tests:
-cosmos=(000 300 301 302 303)
+cd "$(dirname "$0")"
+
+mode=${1:-bfnl}
+case "${mode}" in
+    bphi|bfnl|b-p) ;;
+    *)
+        echo "Usage: bash bphi_prior_pipeline.sh [bphi|bfnl|b-p]"
+        exit 1
+        ;;
+esac
+
+cosmos=(301) #(000 300 301)
+zsnaps=(0.5 0.8 1.1)
+base_cmd=(
+    python bphi_prior_pipeline.py fit
+    --simtype PNG
+    --tracer LRG
+    --zsnaps "${zsnaps[@]}"
+    --mode "${mode}"
+    --kmin 0.006
+    --run-sampler
+)
+runner=(
+    srun -N 1 -C gpu -n 1 
+    --gpus 4 --qos interactive --mem=120G 
+    -t 02:00:00 --account desi_g
+)
+
 for cosmo in "${cosmos[@]}"; do
-    #python bphi_prior_pipeline.py cov --simtype PNG --tracer LRG --zsnaps 0.5 0.8 1.1 --cosmo ${cosmo}
-    #python bphi_prior_plot_pk.py --simtype PNG --tracer LRG --zsnaps 0.5 0.8 1.1 --cosmo ${cosmo}
-    srun -N 1 -C gpu -n 1 --gpus 4 --mem=120G -t 02:00:00 --qos interactive --account desi_g python bphi_prior_pipeline.py fit --simtype PNG --tracer LRG --zsnaps 0.5 0.8 1.1 --mode bphi --cosmo ${cosmo} --run-sampler --kmin 0.006 --with-bphi-prior
-    srun -N 1 -C gpu -n 1 --gpus 4 --mem=120G -t 02:00:00 --qos interactive --account desi_g python bphi_prior_pipeline.py fit --simtype PNG --tracer LRG --zsnaps 0.5 0.8 1.1 --mode bphi --cosmo ${cosmo} --run-sampler --kmin 0.006
+    echo "=== c${cosmo}: ${mode}, no bphi prior ==="
+    #"${runner[@]}" "${base_cmd[@]}" --cosmo "${cosmo}"
+
+    if [[ "${mode}" == "b-p" ]]; then
+        echo "=== c${cosmo}: ${mode} has no free bphi parameter; skipping --with-bphi-prior ==="
+        continue
+    fi
+
+    echo "=== c${cosmo}: ${mode}, with bphi prior ==="
+    "${runner[@]}" "${base_cmd[@]}" --cosmo "${cosmo}" --with-bphi-prior
 done
