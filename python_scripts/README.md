@@ -1,4 +1,4 @@
-# b_phi Work Summary (through 8 May 2026)
+# b_phi Work Summary (through 10 May 2026)
 
 ## Goal
 Focused on debugging and stabilizing the PNG/bphi prior fitting workflow, improving diagnostics/plots, and preparing a clean path to include physically motivated `b1` truth markers in triangle plots.
@@ -67,6 +67,7 @@ Focused on debugging and stabilizing the PNG/bphi prior fitting workflow, improv
 - Verified the wrapper behavior with `py_compile` and a lightweight mock `run_hod` test; full `srun` production rerun is still the next runtime validation.
 
 ## Files Most Actively Updated
+- `b_phi/bphi_true_value/*`
 - `b_phi/bphi_prior_pipeline.py`
 - `b_phi/bphi_prior_pipeline.sh`
 - `b_phi/bphi_prior_fit_debug.sh`
@@ -74,13 +75,14 @@ Focused on debugging and stabilizing the PNG/bphi prior fitting workflow, improv
 - `b_phi/HOD_one_lhc.sh`
 - `b_phi/HOD_utils.py`
 - `b_phi/HOD_bphi.py`
-- `b_phi/HOD_one_lhc_LRG_z095_debug.sh`
 
-## Current Status: 8 May 2026
+## Current Status: 10 May 2026
 - Core fitting/debug pipeline is functional with enhanced diagnostics and clearer prior-handling behavior.
   - Combined `bfnl + bphi-prior` logic is in place for your required simultaneous mode/prior configuration.
   - desilike `bfnl` pipeline still needs follow-up validation/fixing.
   - Joint/single posterior visualization now includes ML/MAP markers and truth-reference overlays.
 - HOD-side `b1` integration path is implemented and ready for production compute runs.
-  - AbacusHOD secondary-redshift handling is now patched for `z = 0.950` via automatic NFW fallback.
-  - Next step is to rerun the SU/PNG HOD catalog production and collect the new `b1` outputs.
+  - ~AbacusHOD secondary-redshift handling is now patched for `z = 0.950` via automatic NFW fallback: the HOD parameters in the published paper doesn't work on this snapshot~
+  - rerun the SU/PNG HOD catalog production and collect the new `b1` outputs.
+  - ~use the real-space Pk of PNG HOD catalogues to fit bphi true values: the first 2 point dominates the fitting. Moreoever, either or not including these two cannot reproduce similar bphi from the universality relation~
+  - 
