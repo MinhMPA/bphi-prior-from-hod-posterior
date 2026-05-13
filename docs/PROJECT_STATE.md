@@ -15,21 +15,21 @@ We show that local-PNG power-spectrum fits constrain the redshift-dependent ampl
 
 Status: preliminary. The claim is well supported as the intended narrative and workflow, but final quantitative constraints are not present in the tracked repository.
 
-Supporting paths: `paper/main.tex`, `docs/superpowers/plans/fnl_sampling_plan_summary.md`, `python_scripts/bphi_prior_pipeline.py`, `python_scripts/README.md`
+Supporting paths: `paper/main.tex`, `docs/superpowers/plans/fnl_sampling_implementation_validation_plan.md`, `python_scripts/bphi_prior_pipeline.py`, `python_scripts/README.md`
 
 ## 3. Scientific motivation
 
 - Problem: local PNG induces a scale-dependent galaxy-bias contribution proportional to `f_NL * b_phi`, making `b_phi` uncertainty a limiting systematic for galaxy-survey `f_NL` inference. Supporting paths: `paper/main.tex`
 - Existing insufficiency: the universality relation `b_phi = 2 delta_c (b_1 - 1)` is only appropriate for idealized mass-selected tracers and is known to fail for realistic galaxy selections. Supporting paths: `paper/main.tex`, `paper/references.bib`
 - New ingredient: use DESI One-Percent/HOD-constrained galaxy-halo connection models to build posterior predictive `b_phi` priors and test them with SU and PNG Abacus workflows. Supporting paths: `paper/main.tex`, `python_scripts/HOD_bphi.py`, `python_scripts/bphi_prior_pipeline.py`
-- Interpretation improvement: report `bfnl_z` when no `b_phi` assumption is used; only convert to `f_NL^loc` under an explicit `b_phi` relation or prior. Supporting paths: `docs/superpowers/plans/fnl_sampling_plan_summary.md`
+- Interpretation improvement: report `bfnl_z` when no `b_phi` assumption is used; only convert to `f_NL^loc` under an explicit `b_phi` relation or prior. Supporting paths: `docs/superpowers/plans/fnl_sampling_implementation_validation_plan.md`
 
 ## 4. Current results snapshot
 
 | Result | Status | Location | Notes |
 |---|---|---|---|
-| Power-spectrum data should be interpreted as constraining `bfnl_z = b_phi,z * f_NL^loc` | robust conceptual decision | `docs/superpowers/plans/fnl_sampling_plan_summary.md` | Use `bfnl_z` as the common diagnostic across prior assumptions. |
-| No free-`b_phi` assumption gives no well-identified `f_NL^loc` posterior | robust conceptual decision | `docs/superpowers/plans/fnl_sampling_plan_summary.md` | Paper should report `bfnl_z` rather than a prior-volume-driven `f_NL` posterior in this case. |
+| Power-spectrum data should be interpreted as constraining `bfnl_z = b_phi,z * f_NL^loc` | robust conceptual decision | `docs/superpowers/plans/fnl_sampling_implementation_validation_plan.md` | Use `bfnl_z` as the common diagnostic across prior assumptions. |
+| No free-`b_phi` assumption gives no well-identified `f_NL^loc` posterior | robust conceptual decision | `docs/superpowers/plans/fnl_sampling_implementation_validation_plan.md` | Paper should report `bfnl_z` rather than a prior-volume-driven `f_NL` posterior in this case. |
 | Combined `bfnl` mode plus HOD `b_phi` prior is implemented | preliminary | `python_scripts/bphi_prior_pipeline.py`, `python_scripts/README.md` | Uses a custom likelihood that marginalizes over one common `f_NL`; desilike `bfnl` workflow still needs follow-up validation. |
 | LRG `z=1.1` `b_phi` prior center/width updated to `N(1.99211960, 1.2898^2)` | preliminary | `python_scripts/README.md` | Tracked repo does not include the referenced final stats file, so treat this as workflow state rather than final result. |
 | HOD-side real-space `b1` computation path is implemented | preliminary | `python_scripts/HOD_utils.py`, `python_scripts/HOD_one_lhc.py`, `python_scripts/HOD_bphi.py`, `python_scripts/README.md` | Intended for truth markers and diagnostics; production rerun remains pending. |
@@ -41,7 +41,7 @@ Supporting paths: `paper/main.tex`, `docs/superpowers/plans/fnl_sampling_plan_su
 | Figure/Table | Purpose | Source script/notebook | Status | Needed changes |
 |---|---|---|---|---|
 | Fig. 1 | Pipeline overview: HOD posterior to SU/PNG `b_phi` calibration to `f_NL` forecast | `paper/main.tex` | not created | Draft schematic and align notation with analysis scripts. |
-| Fig. 2 | Compare `bfnl_z` constraints and `f_NL^loc` posteriors under universality, HOD prior, and no-`b_phi` assumptions | `python_scripts/bphi_prior_pipeline.py`, `docs/superpowers/plans/fnl_sampling_plan_summary.md` | preliminary tooling | Rerun final chains and decide whether `bfnl` mode is primary. |
+| Fig. 2 | Compare `bfnl_z` constraints and `f_NL^loc` posteriors under universality, HOD prior, and no-`b_phi` assumptions | `python_scripts/bphi_prior_pipeline.py`, `docs/superpowers/plans/fnl_sampling_implementation_validation_plan.md` | preliminary tooling | Rerun final chains and decide whether `bfnl` mode is primary. |
 | Fig. 3 | Triangle plots with/without HOD `b_phi` prior, including ML/MAP and truth overlays | `python_scripts/bphi_prior_pipeline.py` | current tooling | Regenerate after final bphi stats and final chain settings. |
 | Fig. 4 | P(k) and covariance variance diagnostics | `python_scripts/bphi_prior_plot_pk.py` | diagnostic tooling | Decide whether this belongs in paper or appendix. |
 | Fig. 5 | PNG real-space bias k-range diagnostic | `python_scripts/test_png_bias_krange.py` | diagnostic tooling | Run for final redshifts/cosmologies; summarize chosen `b1` window. |
@@ -152,7 +152,7 @@ Current proposed story:
 | Current work summary | `python_scripts/README.md` |
 | Script changelog | `python_scripts/CHANGELOG.md` |
 | HOD configs | `HOD_config/abacushod_z0.5_c000.yaml`, `HOD_config/abacushod_z0.8_c000.yaml`, `HOD_config/abacushod_z1.1_c000.yaml`, `HOD_config/lowS8_HOD_ELG.yaml` |
-| FNL interpretation plan | `docs/superpowers/plans/fnl_sampling_plan_summary.md` |
+| FNL interpretation plan | `docs/superpowers/plans/fnl_sampling_implementation_validation_plan.md` |
 | FNL validation plan | `docs/superpowers/plans/fnl_sampling_implementation_validation_plan.md` |
 | Exploratory b1 notebook | `jupyter_notebooks/Fit_b1_to_AbacusSUmmit_HOD_mocks.ipynb` |
 

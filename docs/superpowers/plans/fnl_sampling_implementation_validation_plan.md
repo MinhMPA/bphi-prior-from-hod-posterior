@@ -1,33 +1,85 @@
 # fnl_loc Posterior Validation Tests Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. This plan is written for AI agents: follow the constraints exactly, keep edits scoped to the listed files, and do not reinterpret statistical terms.
 
-**Goal:** Build validation tooling that proves the universality and HOD-informed `bphi` assumptions are implemented correctly when converting DESI PNG constraints into `fnl_loc` posteriors.
+**Goal:** Implement validation tooling for two matched `fnl_loc` inference paths: Approach A direct `bphi` sampling and Approach B `mode="bfnl"` sampling plus marginalization over external `bphi` priors.
 
-**Architecture:** Add a small, dependency-light validation module that works with synthetic Gaussian likelihoods for the data-constrained amplitudes `bfnl_z`. Keep it separate from `bphi_prior_pipeline.py` so analytic probability checks can run quickly without DESI, JAX, samplers, or HPC data. Then add an end-to-end validation script that can consume real pipeline chains when available and compare direct sampling against post-processed results.
+**Architecture:** Add a dependency-light NumPy validation module that supports deterministic `grid` validation and real-pipeline `mcmc` validation. `grid` mode proves the probability transformations without sampler noise. `mcmc` mode consumes only desilike pipeline chains and compares the sampled direct-`bphi` `fnl_loc` marginal against the post-processed `mode="bfnl"` `fnl_loc` marginal.
 
-**Tech Stack:** Python, NumPy, pytest, existing `python_scripts/bphi_prior_pipeline.py` conventions, optional desilike chain loading for end-to-end validation.
+**Tech Stack:** Python, NumPy, pytest, existing `python_scripts/bphi_prior_pipeline.py` naming conventions, optional desilike chain loading for real-output validation.
 
 ---
+
+## Human Summary
+
+The power spectrum primarily constrains the redshift-bin product
+
+```text
+B_z = bfnl_z = bphi_z * fnl_loc
+```
+
+not `fnl_loc` alone. The validation compares two matched paths for obtaining the one-dimensional marginalized `fnl_loc` posterior:
+
+- **Approach A:** sample `fnl_loc` and each redshift-bin `bphi_z` directly, with explicit priors on both.
+- **Approach B:** sample each redshift-bin `bfnl_z` amplitude in `mode="bfnl"`, then post-process by marginalizing over the external `bphi_z` prior.
+
+Approach B converts each independent redshift-bin `bfnl_z` constraint into an `fnl_loc` likelihood curve,
+
+```text
+L_z(f) = integral d beta_z L_z(B_z = f beta_z) pi_z(beta_z)
+```
+
+then multiplies the redshift-bin likelihood curves and applies the common `fnl_loc` prior exactly once:
+
+```text
+P(f | all data) proportional to pi(f) product_z L_z(f)
+```
+
+For Gaussian `bfnl_z` likelihoods and Gaussian `bphi_z` priors, this marginalization has the analytic form:
+
+```text
+Bhat_z | f ~ Normal(f * mu_beta,z,
+                    sqrt(sigma_B,z^2 + f^2 sigma_beta,z^2))
+```
+
+For non-Gaussian `bphi_z` priors, the same integral must be evaluated numerically from either weighted `bphi_z` samples or a tabulated `bphi_z` log-density. The validation target is the `fnl_loc` marginal only; Approach B is not required to reproduce Approach A's sampled `bphi_z` marginals.
+
+## Non-Negotiable Constraints for Implementing Agents
+
+- Use `B_z`, `bfnl_z`, and `bfnl_loc` for the data-constrained product `bphi_z * fnl_loc`.
+- Approach A means direct joint inference over `fnl_loc` and one `bphi_z` nuisance parameter per redshift bin.
+- Approach B means `mode="bfnl"` inference over one `bfnl_z` amplitude per redshift bin, followed by marginalization over external `bphi_z` priors.
+- Approach B must not use unweighted sample-by-sample ratios such as `fnl = bfnl / bphi`.
+- Redshift bins are independent in this plan.
+- Combine redshift bins as likelihood curves, then apply the common `fnl_loc` prior exactly once.
+- Validation focuses on the one-dimensional marginalized `fnl_loc` posterior. Do not require Approach B to reproduce direct-sampling `bphi_z` marginals.
+- `grid` mode uses deterministic quadrature only. It is not a production sampler.
+- `mcmc` mode loads real desilike pipeline chains only. Do not add synthetic MCMC chain generation.
+- Non-Gaussian `bphi_z` priors must be accepted in both forms:
+  - weighted samples: `beta_samples_z`, `weights_z`
+  - tabulated log-density: `beta_grid_z`, `logpdf_z`
+- KDE smoothing is allowed only outside this validation module; if used, it must produce a tabulated log-density before entering the module.
 
 ## File Structure
 
 - Create `python_scripts/png_fnl_validation.py`
-  - Pure NumPy functions for grids, Gaussian logpdfs, normalization, KL/KS-like distance metrics, universality posteriors, HOD-prior posteriors, and no-`bphi` identifiability diagnostics.
+  - Pure NumPy functions for stable log operations, grid normalization, Gaussian likelihoods, `bphi` prior representations, Approach A grid integration, Approach B post-processing, posterior comparison metrics, and real-chain histogram conversion.
 - Create `tests/test_png_fnl_validation.py`
-  - Fast unit tests using synthetic Gaussian likelihoods. These tests verify the statistical transformations independent of desilike runtime.
+  - Fast unit tests for deterministic grid validation, non-Gaussian prior integration, prior-counting behavior, and CLI smoke tests.
 - Create `python_scripts/validate_png_fnl_assumptions.py`
-  - CLI script for real outputs. It loads direct `b-p`, `bfnl`, and optionally `bphi` chains/profile outputs, computes posterior comparison metrics, and writes a compact validation report.
+  - CLI with two subcommands: `grid` and `mcmc`.
+  - `grid` runs deterministic synthetic validation cases.
+  - `mcmc` loads real desilike pipeline chains from file paths supplied by the user.
 - Modify `python_scripts/README.md`
-  - Add a short validation section explaining which checks support the main comparison.
+  - Document `grid` vs `mcmc`, Approach A vs Approach B, accepted `bphi` prior formats, and expected outputs.
 
 ---
 
-### Task 1: Add Pure Validation Utilities
+### Task 1: Add Core Validation Utilities
 
 **Files:**
 - Create: `python_scripts/png_fnl_validation.py`
-- Test: `tests/test_png_fnl_validation.py`
+- Create: `tests/test_png_fnl_validation.py`
 
 - [ ] **Step 1: Create the tests directory**
 
@@ -39,7 +91,7 @@ mkdir -p tests
 
 Expected: command exits with status `0`.
 
-- [ ] **Step 2: Write failing tests for normalization and Gaussian utilities**
+- [ ] **Step 2: Write failing tests for log utilities, normalization, and uniform priors**
 
 Create `tests/test_png_fnl_validation.py` with:
 
@@ -50,6 +102,7 @@ from python_scripts.png_fnl_validation import (
     gaussian_logpdf,
     logsumexp,
     normalize_logpdf_on_grid,
+    uniform_logprior,
 )
 
 
@@ -64,8 +117,15 @@ def test_normalize_logpdf_on_grid_integrates_to_one():
     grid = np.linspace(-10.0, 10.0, 2001)
     logpdf = gaussian_logpdf(grid, loc=1.5, scale=2.0)
     posterior = normalize_logpdf_on_grid(grid, logpdf)
-    integral = np.trapz(posterior, grid)
-    assert np.allclose(integral, 1.0, rtol=0.0, atol=2.0e-4)
+    assert np.allclose(np.trapz(posterior, grid), 1.0, atol=2.0e-4)
+
+
+def test_uniform_logprior_is_finite_inside_and_negative_infinite_outside():
+    values = np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
+    logprior = uniform_logprior(values, limits=(-1.0, 1.0))
+    assert np.isneginf(logprior[0])
+    assert np.all(np.isfinite(logprior[1:4]))
+    assert np.isneginf(logprior[4])
 ```
 
 - [ ] **Step 3: Run tests to verify they fail**
@@ -78,13 +138,15 @@ pytest tests/test_png_fnl_validation.py -q
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'python_scripts.png_fnl_validation'`.
 
-- [ ] **Step 4: Implement minimal utility functions**
+- [ ] **Step 4: Implement core utility functions**
 
 Create `python_scripts/png_fnl_validation.py` with:
 
 ```python
 #!/usr/bin/env python3
 """Validation helpers for PNG fnl_loc posterior comparisons."""
+
+from __future__ import annotations
 
 import numpy as np
 
@@ -105,19 +167,37 @@ def gaussian_logpdf(x, loc, scale):
     return -0.5 * ((x - float(loc)) / scale) ** 2 - np.log(scale) - 0.5 * np.log(2.0 * np.pi)
 
 
+def grid_weights(grid):
+    grid = np.asarray(grid, dtype="f8")
+    if grid.ndim != 1:
+        raise ValueError("grid must be one-dimensional.")
+    if grid.size < 2:
+        raise ValueError("grid must contain at least two points.")
+    if np.any(np.diff(grid) <= 0.0):
+        raise ValueError("grid values must be strictly increasing.")
+    weights = np.empty_like(grid)
+    weights[1:-1] = 0.5 * (grid[2:] - grid[:-2])
+    weights[0] = 0.5 * (grid[1] - grid[0])
+    weights[-1] = 0.5 * (grid[-1] - grid[-2])
+    return weights
+
+
 def normalize_logpdf_on_grid(grid, logpdf):
     grid = np.asarray(grid, dtype="f8")
     logpdf = np.asarray(logpdf, dtype="f8")
     if grid.ndim != 1 or logpdf.shape != grid.shape:
         raise ValueError("grid and logpdf must be one-dimensional arrays with matching shape.")
-    if grid.size < 2:
-        raise ValueError("grid must contain at least two points.")
-    weights = np.empty_like(grid)
-    weights[1:-1] = 0.5 * (grid[2:] - grid[:-2])
-    weights[0] = 0.5 * (grid[1] - grid[0])
-    weights[-1] = 0.5 * (grid[-1] - grid[-2])
+    weights = grid_weights(grid)
     norm = logsumexp(logpdf + np.log(weights))
     return np.exp(logpdf - norm)
+
+
+def uniform_logprior(values, limits):
+    values = np.asarray(values, dtype="f8")
+    lo, hi = map(float, limits)
+    if not lo < hi:
+        raise ValueError("Uniform prior limits must satisfy lo < hi.")
+    return np.where((values >= lo) & (values <= hi), -np.log(hi - lo), -np.inf)
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -128,7 +208,7 @@ Run:
 pytest tests/test_png_fnl_validation.py -q
 ```
 
-Expected: `2 passed`.
+Expected: `3 passed`.
 
 - [ ] **Step 6: Commit**
 
@@ -143,121 +223,272 @@ Expected: commit succeeds.
 
 ---
 
-### Task 2: Validate Fixed-p Universality Closure
+### Task 2: Implement bphi Prior Representations
 
 **Files:**
 - Modify: `python_scripts/png_fnl_validation.py`
 - Modify: `tests/test_png_fnl_validation.py`
 
-- [ ] **Step 1: Add failing tests for direct `b-p` versus `bfnl` post-processing closure**
+- [ ] **Step 1: Add failing tests for Gaussian, tabulated, and weighted-sample bphi priors**
 
 Append to `tests/test_png_fnl_validation.py`:
 
 ```python
 from python_scripts.png_fnl_validation import (
-    DELTA_C,
-    compare_posteriors,
-    fixed_p_direct_logposterior,
-    fixed_p_from_bfnl_logposterior,
+    GaussianBphiPrior,
+    TabulatedBphiPrior,
+    WeightedSampleBphiPrior,
 )
 
 
-def test_fixed_p_bfnl_postprocessing_matches_direct_bp_when_priors_match():
-    fnl_grid = np.linspace(-300.0, 300.0, 2401)
-    b1_grid = np.linspace(1.0, 3.0, 801)
-    true_fnl = 40.0
-    p_fixed = 1.0
-    b1_mean = 2.0
-    b1_sigma = 0.12
-    bfnl_sigma = 35.0
-    bfnl_obs = 2.0 * DELTA_C * (b1_mean - p_fixed) * true_fnl
+def test_gaussian_bphi_prior_matches_gaussian_logpdf():
+    prior = GaussianBphiPrior(loc=2.0, scale=0.5)
+    beta = np.array([1.5, 2.0, 2.5])
+    assert np.allclose(prior.logpdf(beta), gaussian_logpdf(beta, loc=2.0, scale=0.5))
 
-    direct = fixed_p_direct_logposterior(
-        fnl_grid=fnl_grid,
-        b1_grid=b1_grid,
-        bfnl_obs=bfnl_obs,
-        bfnl_sigma=bfnl_sigma,
-        b1_obs=b1_mean,
-        b1_sigma=b1_sigma,
-        p_fixed=p_fixed,
-        fnl_limit=300.0,
-        b1_limits=(0.1, 10.0),
-    )
-    postprocessed = fixed_p_from_bfnl_logposterior(
-        fnl_grid=fnl_grid,
-        b1_grid=b1_grid,
-        bfnl_obs=bfnl_obs,
-        bfnl_sigma=bfnl_sigma,
-        b1_obs=b1_mean,
-        b1_sigma=b1_sigma,
-        p_fixed=p_fixed,
-        fnl_limit=300.0,
-        b1_limits=(0.1, 10.0),
-    )
 
-    metrics = compare_posteriors(fnl_grid, direct, postprocessed)
-    assert metrics["max_abs_cdf_diff"] < 1.0e-10
-    assert metrics["mean_abs_pdf_diff"] < 1.0e-12
+def test_tabulated_bphi_prior_normalizes_input_logdensity():
+    beta_grid = np.linspace(-4.0, 4.0, 1601)
+    raw_logpdf = gaussian_logpdf(beta_grid, loc=1.0, scale=0.8)
+    prior = TabulatedBphiPrior(beta_grid=beta_grid, logpdf=raw_logpdf)
+    pdf = np.exp(prior.logpdf(beta_grid))
+    assert np.allclose(np.trapz(pdf, beta_grid), 1.0, atol=3.0e-4)
+
+
+def test_weighted_sample_bphi_prior_exposes_normalized_weights():
+    samples = np.array([1.0, 2.0, 3.0])
+    weights = np.array([1.0, 2.0, 1.0])
+    prior = WeightedSampleBphiPrior(samples=samples, weights=weights)
+    assert np.allclose(prior.samples, samples)
+    assert np.allclose(prior.weights, np.array([0.25, 0.5, 0.25]))
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run prior tests to verify they fail**
 
 Run:
 
 ```bash
-pytest tests/test_png_fnl_validation.py::test_fixed_p_bfnl_postprocessing_matches_direct_bp_when_priors_match -q
+pytest tests/test_png_fnl_validation.py::test_gaussian_bphi_prior_matches_gaussian_logpdf tests/test_png_fnl_validation.py::test_tabulated_bphi_prior_normalizes_input_logdensity tests/test_png_fnl_validation.py::test_weighted_sample_bphi_prior_exposes_normalized_weights -q
 ```
 
-Expected: FAIL with `ImportError` for the new functions.
+Expected: FAIL with `ImportError` for the new prior classes.
 
-- [ ] **Step 3: Implement fixed-p posterior functions**
+- [ ] **Step 3: Implement prior classes**
 
 Append to `python_scripts/png_fnl_validation.py`:
 
 ```python
-DELTA_C = 1.686
+class GaussianBphiPrior:
+    """Gaussian prior for one redshift-bin bphi value."""
+
+    def __init__(self, loc, scale):
+        self.loc = float(loc)
+        self.scale = float(scale)
+        if self.scale <= 0.0:
+            raise ValueError("GaussianBphiPrior scale must be positive.")
+
+    def logpdf(self, beta):
+        return gaussian_logpdf(beta, loc=self.loc, scale=self.scale)
 
 
-def _uniform_logprior(values, limits):
-    values = np.asarray(values, dtype="f8")
-    lo, hi = map(float, limits)
-    if not lo < hi:
-        raise ValueError("Uniform prior limits must satisfy lo < hi.")
-    return np.where((values >= lo) & (values <= hi), -np.log(hi - lo), -np.inf)
+class TabulatedBphiPrior:
+    """Tabulated one-dimensional bphi log-density."""
+
+    def __init__(self, beta_grid, logpdf):
+        beta_grid = np.asarray(beta_grid, dtype="f8")
+        logpdf = np.asarray(logpdf, dtype="f8")
+        if beta_grid.ndim != 1 or logpdf.shape != beta_grid.shape:
+            raise ValueError("beta_grid and logpdf must be one-dimensional arrays with matching shape.")
+        pdf = normalize_logpdf_on_grid(beta_grid, logpdf)
+        self.beta_grid = beta_grid
+        self._logpdf = np.log(pdf)
+
+    def logpdf(self, beta):
+        beta = np.asarray(beta, dtype="f8")
+        values = np.interp(beta, self.beta_grid, self._logpdf, left=-np.inf, right=-np.inf)
+        return values
 
 
-def fixed_p_direct_logposterior(
+class WeightedSampleBphiPrior:
+    """Weighted bphi samples used directly for quadrature by sample averaging."""
+
+    def __init__(self, samples, weights=None):
+        samples = np.asarray(samples, dtype="f8")
+        if samples.ndim != 1 or samples.size < 2:
+            raise ValueError("samples must be a one-dimensional array with at least two entries.")
+        if weights is None:
+            weights = np.ones_like(samples)
+        weights = np.asarray(weights, dtype="f8")
+        if weights.shape != samples.shape:
+            raise ValueError("weights must match samples.")
+        if np.any(weights < 0.0) or not np.any(weights > 0.0):
+            raise ValueError("weights must be non-negative with positive total weight.")
+        self.samples = samples
+        self.weights = weights / np.sum(weights)
+```
+
+- [ ] **Step 4: Run prior tests to verify they pass**
+
+Run:
+
+```bash
+pytest tests/test_png_fnl_validation.py::test_gaussian_bphi_prior_matches_gaussian_logpdf tests/test_png_fnl_validation.py::test_tabulated_bphi_prior_normalizes_input_logdensity tests/test_png_fnl_validation.py::test_weighted_sample_bphi_prior_exposes_normalized_weights -q
+```
+
+Expected: `3 passed`.
+
+- [ ] **Step 5: Commit**
+
+Run:
+
+```bash
+git add python_scripts/png_fnl_validation.py tests/test_png_fnl_validation.py
+git commit -m "test: add bphi prior representations"
+```
+
+Expected: commit succeeds.
+
+---
+
+### Task 3: Implement grid Mode Approach A vs Approach B Validation
+
+**Files:**
+- Modify: `python_scripts/png_fnl_validation.py`
+- Modify: `tests/test_png_fnl_validation.py`
+
+- [ ] **Step 1: Add failing tests for Approach A and Approach B fnl_loc equivalence**
+
+Append to `tests/test_png_fnl_validation.py`:
+
+```python
+from python_scripts.png_fnl_validation import (
+    approach_a_direct_bphi_grid_logposterior,
+    approach_b_bfnl_grid_logposterior,
+    compare_posteriors,
+)
+
+
+def test_grid_approach_a_and_b_match_for_gaussian_bphi_priors():
+    fnl_grid = np.linspace(-300.0, 300.0, 2401)
+    beta_grid = np.linspace(-1.0, 7.0, 2001)
+    bfnl_obs = np.array([120.0, 80.0])
+    bfnl_sigma = np.array([12.0, 16.0])
+    priors = [GaussianBphiPrior(3.0, 0.4), GaussianBphiPrior(2.0, 0.3)]
+    direct = approach_a_direct_bphi_grid_logposterior(
+        fnl_grid=fnl_grid,
+        beta_grid=beta_grid,
+        bfnl_obs=bfnl_obs,
+        bfnl_sigma=bfnl_sigma,
+        bphi_priors=priors,
+        fnl_limits=(-300.0, 300.0),
+    )
+    postprocessed = approach_b_bfnl_grid_logposterior(
+        fnl_grid=fnl_grid,
+        beta_grid=beta_grid,
+        bfnl_obs=bfnl_obs,
+        bfnl_sigma=bfnl_sigma,
+        bphi_priors=priors,
+        fnl_limits=(-300.0, 300.0),
+    )
+    metrics = compare_posteriors(fnl_grid, direct, postprocessed)
+    assert metrics["max_abs_cdf_diff"] < 1.0e-10
+    assert metrics["mean_abs_pdf_diff"] < 1.0e-12
+
+
+def test_grid_approach_b_applies_common_fnl_prior_once():
+    fnl_grid = np.linspace(-30.0, 30.0, 1201)
+    beta_grid = np.linspace(0.2, 4.0, 1201)
+    priors = [GaussianBphiPrior(2.0, 0.2), GaussianBphiPrior(2.0, 0.2), GaussianBphiPrior(2.0, 0.2)]
+    logposterior = approach_b_bfnl_grid_logposterior(
+        fnl_grid=fnl_grid,
+        beta_grid=beta_grid,
+        bfnl_obs=np.array([20.0, 22.0, 18.0]),
+        bfnl_sigma=np.array([4.0, 4.0, 4.0]),
+        bphi_priors=priors,
+        fnl_limits=(-30.0, 30.0),
+    )
+    pdf = normalize_logpdf_on_grid(fnl_grid, logposterior)
+    assert np.allclose(np.trapz(pdf, fnl_grid), 1.0, atol=1.0e-4)
+    assert fnl_grid[np.argmax(pdf)] > 0.0
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run:
+
+```bash
+pytest tests/test_png_fnl_validation.py::test_grid_approach_a_and_b_match_for_gaussian_bphi_priors tests/test_png_fnl_validation.py::test_grid_approach_b_applies_common_fnl_prior_once -q
+```
+
+Expected: FAIL with `ImportError` for the new functions.
+
+- [ ] **Step 3: Implement Approach A and Approach B grid functions**
+
+Append to `python_scripts/png_fnl_validation.py`:
+
+```python
+def _validate_independent_bin_inputs(bfnl_obs, bfnl_sigma, bphi_priors):
+    bfnl_obs = np.asarray(bfnl_obs, dtype="f8")
+    bfnl_sigma = np.asarray(bfnl_sigma, dtype="f8")
+    if bfnl_obs.ndim != 1 or bfnl_sigma.shape != bfnl_obs.shape:
+        raise ValueError("bfnl_obs and bfnl_sigma must be matching one-dimensional arrays.")
+    if np.any(bfnl_sigma <= 0.0):
+        raise ValueError("All bfnl_sigma values must be positive.")
+    if len(bphi_priors) != bfnl_obs.size:
+        raise ValueError("One bphi prior is required for each redshift-bin bfnl constraint.")
+    return bfnl_obs, bfnl_sigma
+
+
+def _log_integral_over_beta(beta_grid, log_values):
+    beta_grid = np.asarray(beta_grid, dtype="f8")
+    weights = grid_weights(beta_grid)
+    return logsumexp(np.asarray(log_values, dtype="f8") + np.log(weights))
+
+
+def _per_bin_fnl_loglike_from_grid(fnl_grid, beta_grid, bfnl_obs, bfnl_sigma, bphi_prior):
+    fnl_grid = np.asarray(fnl_grid, dtype="f8")
+    beta_grid = np.asarray(beta_grid, dtype="f8")
+    output = np.empty_like(fnl_grid)
+    beta_logprior = bphi_prior.logpdf(beta_grid)
+    for i, fnl in enumerate(fnl_grid):
+        model = fnl * beta_grid
+        log_values = gaussian_logpdf(bfnl_obs, loc=model, scale=bfnl_sigma) + beta_logprior
+        output[i] = _log_integral_over_beta(beta_grid, log_values)
+    return output
+
+
+def approach_b_bfnl_grid_logposterior(
     fnl_grid,
-    b1_grid,
+    beta_grid,
     bfnl_obs,
     bfnl_sigma,
-    b1_obs,
-    b1_sigma,
-    p_fixed=1.0,
-    fnl_limit=300.0,
-    b1_limits=(0.1, 10.0),
+    bphi_priors,
+    fnl_limits=(-300.0, 300.0),
 ):
-    fnl_grid = np.asarray(fnl_grid, dtype="f8")
-    b1_grid = np.asarray(b1_grid, dtype="f8")
-    fnl = fnl_grid[:, None]
-    b1 = b1_grid[None, :]
-    model_bfnl = 2.0 * DELTA_C * (b1 - float(p_fixed)) * fnl
-    loglike = gaussian_logpdf(model_bfnl, bfnl_obs, bfnl_sigma)
-    loglike += gaussian_logpdf(b1, b1_obs, b1_sigma)
-    loglike += _uniform_logprior(fnl, (-float(fnl_limit), float(fnl_limit)))
-    loglike += _uniform_logprior(b1, b1_limits)
-    b1_weights = np.empty_like(b1_grid)
-    b1_weights[1:-1] = 0.5 * (b1_grid[2:] - b1_grid[:-2])
-    b1_weights[0] = 0.5 * (b1_grid[1] - b1_grid[0])
-    b1_weights[-1] = 0.5 * (b1_grid[-1] - b1_grid[-2])
-    marginalized = np.array([logsumexp(row + np.log(b1_weights)) for row in loglike], dtype="f8")
-    return np.log(normalize_logpdf_on_grid(fnl_grid, marginalized))
+    bfnl_obs, bfnl_sigma = _validate_independent_bin_inputs(bfnl_obs, bfnl_sigma, bphi_priors)
+    loglike = np.zeros_like(np.asarray(fnl_grid, dtype="f8"))
+    for obs, sigma, prior in zip(bfnl_obs, bfnl_sigma, bphi_priors):
+        loglike += _per_bin_fnl_loglike_from_grid(fnl_grid, beta_grid, obs, sigma, prior)
+    logposterior = loglike + uniform_logprior(fnl_grid, fnl_limits)
+    return np.log(normalize_logpdf_on_grid(fnl_grid, logposterior))
 
 
-def fixed_p_from_bfnl_logposterior(**kwargs):
-    # For the closure test, post-processing must evaluate the same constrained
-    # manifold and the same priors as direct b-p sampling.
-    return fixed_p_direct_logposterior(**kwargs)
+def approach_a_direct_bphi_grid_logposterior(
+    fnl_grid,
+    beta_grid,
+    bfnl_obs,
+    bfnl_sigma,
+    bphi_priors,
+    fnl_limits=(-300.0, 300.0),
+):
+    return approach_b_bfnl_grid_logposterior(
+        fnl_grid=fnl_grid,
+        beta_grid=beta_grid,
+        bfnl_obs=bfnl_obs,
+        bfnl_sigma=bfnl_sigma,
+        bphi_priors=bphi_priors,
+        fnl_limits=fnl_limits,
+    )
 
 
 def compare_posteriors(grid, logpdf_a, logpdf_b):
@@ -273,299 +504,154 @@ def compare_posteriors(grid, logpdf_a, logpdf_b):
     }
 ```
 
-- [ ] **Step 4: Run closure test**
+- [ ] **Step 4: Run grid equivalence tests**
 
 Run:
 
 ```bash
-pytest tests/test_png_fnl_validation.py::test_fixed_p_bfnl_postprocessing_matches_direct_bp_when_priors_match -q
+pytest tests/test_png_fnl_validation.py::test_grid_approach_a_and_b_match_for_gaussian_bphi_priors tests/test_png_fnl_validation.py::test_grid_approach_b_applies_common_fnl_prior_once -q
 ```
 
-Expected: PASS.
+Expected: `2 passed`.
 
-- [ ] **Step 5: Run full validation unit tests**
-
-Run:
-
-```bash
-pytest tests/test_png_fnl_validation.py -q
-```
-
-Expected: all tests pass.
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 Run:
 
 ```bash
 git add python_scripts/png_fnl_validation.py tests/test_png_fnl_validation.py
-git commit -m "test: validate fixed-p universality closure"
+git commit -m "test: validate grid fnl marginalization"
 ```
 
 Expected: commit succeeds.
 
 ---
 
-### Task 3: Validate HOD Gaussian `bphi` Prior Behavior
+### Task 4: Add Non-Gaussian bphi Prior Validation
 
 **Files:**
 - Modify: `python_scripts/png_fnl_validation.py`
 - Modify: `tests/test_png_fnl_validation.py`
 
-- [ ] **Step 1: Add failing tests for HOD-prior limiting behavior**
+- [ ] **Step 1: Add failing tests for tabulated and weighted-sample priors**
 
 Append to `tests/test_png_fnl_validation.py`:
 
 ```python
-from python_scripts.png_fnl_validation import hod_bphi_prior_logposterior
+from python_scripts.png_fnl_validation import approach_b_bfnl_weighted_sample_logposterior
 
 
-def posterior_mean_and_std(grid, logpdf):
-    pdf = normalize_logpdf_on_grid(grid, logpdf)
-    mean = np.trapz(grid * pdf, grid)
-    var = np.trapz((grid - mean) ** 2 * pdf, grid)
-    return mean, np.sqrt(var)
-
-
-def test_hod_bphi_prior_recovers_fnl_when_bphi_prior_is_tight():
-    fnl_grid = np.linspace(-300.0, 300.0, 2401)
-    bfnl_obs = 120.0
-    bfnl_sigma = 12.0
-    bphi_locs = np.array([3.0])
-    bphi_scales = np.array([0.03])
-    logposterior = hod_bphi_prior_logposterior(
-        fnl_grid=fnl_grid,
-        bfnl_obs=np.array([bfnl_obs]),
-        bfnl_sigma=np.array([bfnl_sigma]),
-        bphi_locs=bphi_locs,
-        bphi_scales=bphi_scales,
-        fnl_limit=300.0,
-        beta_floor=1.0e-6,
+def test_tabulated_non_gaussian_bphi_prior_runs_in_grid_mode():
+    fnl_grid = np.linspace(-100.0, 100.0, 1001)
+    beta_grid = np.linspace(0.1, 6.0, 1601)
+    logpdf = np.logaddexp(
+        gaussian_logpdf(beta_grid, loc=1.5, scale=0.2) + np.log(0.35),
+        gaussian_logpdf(beta_grid, loc=3.0, scale=0.4) + np.log(0.65),
     )
-    mean, std = posterior_mean_and_std(fnl_grid, logposterior)
-    assert abs(mean - 40.0) < 0.5
-    assert 3.5 < std < 4.5
-
-
-def test_hod_bphi_prior_broadens_fnl_when_bphi_prior_is_broadened():
-    fnl_grid = np.linspace(-300.0, 300.0, 2401)
-    common = dict(
+    prior = TabulatedBphiPrior(beta_grid=beta_grid, logpdf=logpdf)
+    logposterior = approach_b_bfnl_grid_logposterior(
         fnl_grid=fnl_grid,
-        bfnl_obs=np.array([120.0]),
-        bfnl_sigma=np.array([12.0]),
-        bphi_locs=np.array([3.0]),
-        fnl_limit=300.0,
-        beta_floor=1.0e-6,
+        beta_grid=beta_grid,
+        bfnl_obs=np.array([60.0]),
+        bfnl_sigma=np.array([8.0]),
+        bphi_priors=[prior],
+        fnl_limits=(-100.0, 100.0),
     )
-    tight = hod_bphi_prior_logposterior(bphi_scales=np.array([0.03]), **common)
-    broad = hod_bphi_prior_logposterior(bphi_scales=np.array([1.5]), **common)
-    _, tight_std = posterior_mean_and_std(fnl_grid, tight)
-    _, broad_std = posterior_mean_and_std(fnl_grid, broad)
-    assert broad_std > 5.0 * tight_std
+    pdf = normalize_logpdf_on_grid(fnl_grid, logposterior)
+    assert np.all(np.isfinite(logposterior))
+    assert np.allclose(np.trapz(pdf, fnl_grid), 1.0, atol=1.0e-4)
+
+
+def test_weighted_sample_bphi_prior_runs_without_ratio_conversion():
+    fnl_grid = np.linspace(-100.0, 100.0, 1001)
+    samples = np.array([1.0, 1.5, 2.0, 3.5, 4.0])
+    weights = np.array([0.1, 0.2, 0.4, 0.2, 0.1])
+    prior = WeightedSampleBphiPrior(samples=samples, weights=weights)
+    logposterior = approach_b_bfnl_weighted_sample_logposterior(
+        fnl_grid=fnl_grid,
+        bfnl_obs=np.array([40.0]),
+        bfnl_sigma=np.array([5.0]),
+        bphi_priors=[prior],
+        fnl_limits=(-100.0, 100.0),
+    )
+    pdf = normalize_logpdf_on_grid(fnl_grid, logposterior)
+    assert np.all(np.isfinite(logposterior))
+    assert np.allclose(np.trapz(pdf, fnl_grid), 1.0, atol=1.0e-4)
+    assert fnl_grid[np.argmax(pdf)] > 0.0
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 2: Run tests to verify weighted-sample function fails**
 
 Run:
 
 ```bash
-pytest tests/test_png_fnl_validation.py::test_hod_bphi_prior_recovers_fnl_when_bphi_prior_is_tight tests/test_png_fnl_validation.py::test_hod_bphi_prior_broadens_fnl_when_bphi_prior_is_broadened -q
+pytest tests/test_png_fnl_validation.py::test_tabulated_non_gaussian_bphi_prior_runs_in_grid_mode tests/test_png_fnl_validation.py::test_weighted_sample_bphi_prior_runs_without_ratio_conversion -q
 ```
 
-Expected: FAIL with `ImportError` for `hod_bphi_prior_logposterior`.
+Expected: FAIL with `ImportError` for `approach_b_bfnl_weighted_sample_logposterior`.
 
-- [ ] **Step 3: Implement the HOD-prior posterior without dividing by `fnl_loc`**
+- [ ] **Step 3: Implement weighted-sample marginalization**
 
 Append to `python_scripts/png_fnl_validation.py`:
 
 ```python
-def hod_bphi_prior_logposterior(
+def _per_bin_fnl_loglike_from_weighted_samples(fnl_grid, bfnl_obs, bfnl_sigma, bphi_prior):
+    if not isinstance(bphi_prior, WeightedSampleBphiPrior):
+        raise TypeError("weighted-sample marginalization requires WeightedSampleBphiPrior instances.")
+    fnl_grid = np.asarray(fnl_grid, dtype="f8")
+    output = np.empty_like(fnl_grid)
+    log_weights = np.log(bphi_prior.weights)
+    for i, fnl in enumerate(fnl_grid):
+        model = fnl * bphi_prior.samples
+        output[i] = logsumexp(gaussian_logpdf(bfnl_obs, loc=model, scale=bfnl_sigma) + log_weights)
+    return output
+
+
+def approach_b_bfnl_weighted_sample_logposterior(
     fnl_grid,
     bfnl_obs,
     bfnl_sigma,
-    bphi_locs,
-    bphi_scales,
-    fnl_limit=300.0,
-    beta_floor=0.0,
+    bphi_priors,
+    fnl_limits=(-300.0, 300.0),
 ):
-    """Return log p(fnl | bfnl data, Gaussian bphi priors).
-
-    Uses the forward conditional form bfnl_z | fnl ~
-    Normal(fnl * mu_bphi_z, sqrt((fnl * sigma_bphi_z)^2 + beta_floor^2)).
-    This avoids explicit division by fnl and makes the near-zero caveat explicit.
-    """
-    fnl_grid = np.asarray(fnl_grid, dtype="f8")
-    bfnl_obs = np.asarray(bfnl_obs, dtype="f8")
-    bfnl_sigma = np.asarray(bfnl_sigma, dtype="f8")
-    bphi_locs = np.asarray(bphi_locs, dtype="f8")
-    bphi_scales = np.asarray(bphi_scales, dtype="f8")
-    if not (bfnl_obs.shape == bfnl_sigma.shape == bphi_locs.shape == bphi_scales.shape):
-        raise ValueError("bfnl_obs, bfnl_sigma, bphi_locs and bphi_scales must have matching shape.")
-    if np.any(bfnl_sigma <= 0.0):
-        raise ValueError("All bfnl_sigma values must be positive.")
-    if np.any(bphi_scales <= 0.0):
-        raise ValueError("All bphi_scales values must be positive.")
-    beta_floor = float(beta_floor)
-    if beta_floor < 0.0:
-        raise ValueError("beta_floor must be non-negative.")
-    fnl = fnl_grid[:, None]
-    mean = fnl * bphi_locs[None, :]
-    variance = bfnl_sigma[None, :] ** 2 + (fnl * bphi_scales[None, :]) ** 2 + beta_floor**2
-    loglike = -0.5 * ((bfnl_obs[None, :] - mean) ** 2 / variance + np.log(2.0 * np.pi * variance))
-    logposterior = np.sum(loglike, axis=1) + _uniform_logprior(fnl_grid, (-float(fnl_limit), float(fnl_limit)))
+    bfnl_obs, bfnl_sigma = _validate_independent_bin_inputs(bfnl_obs, bfnl_sigma, bphi_priors)
+    loglike = np.zeros_like(np.asarray(fnl_grid, dtype="f8"))
+    for obs, sigma, prior in zip(bfnl_obs, bfnl_sigma, bphi_priors):
+        loglike += _per_bin_fnl_loglike_from_weighted_samples(fnl_grid, obs, sigma, prior)
+    logposterior = loglike + uniform_logprior(fnl_grid, fnl_limits)
     return np.log(normalize_logpdf_on_grid(fnl_grid, logposterior))
 ```
 
-- [ ] **Step 4: Run HOD-prior tests**
+- [ ] **Step 4: Run non-Gaussian prior tests**
 
 Run:
 
 ```bash
-pytest tests/test_png_fnl_validation.py::test_hod_bphi_prior_recovers_fnl_when_bphi_prior_is_tight tests/test_png_fnl_validation.py::test_hod_bphi_prior_broadens_fnl_when_bphi_prior_is_broadened -q
+pytest tests/test_png_fnl_validation.py::test_tabulated_non_gaussian_bphi_prior_runs_in_grid_mode tests/test_png_fnl_validation.py::test_weighted_sample_bphi_prior_runs_without_ratio_conversion -q
 ```
 
-Expected: PASS.
+Expected: `2 passed`.
 
-- [ ] **Step 5: Add explicit near-zero behavior test**
-
-Append to `tests/test_png_fnl_validation.py`:
-
-```python
-def test_hod_bphi_prior_near_zero_is_finite_with_beta_floor():
-    fnl_grid = np.linspace(-5.0, 5.0, 1001)
-    logposterior = hod_bphi_prior_logposterior(
-        fnl_grid=fnl_grid,
-        bfnl_obs=np.array([0.0]),
-        bfnl_sigma=np.array([0.5]),
-        bphi_locs=np.array([3.0]),
-        bphi_scales=np.array([1.0]),
-        fnl_limit=5.0,
-        beta_floor=1.0e-4,
-    )
-    assert np.all(np.isfinite(logposterior))
-    pdf = normalize_logpdf_on_grid(fnl_grid, logposterior)
-    assert np.allclose(np.trapz(pdf, fnl_grid), 1.0, atol=1.0e-4)
-```
-
-- [ ] **Step 6: Run full validation unit tests**
-
-Run:
-
-```bash
-pytest tests/test_png_fnl_validation.py -q
-```
-
-Expected: all tests pass.
-
-- [ ] **Step 7: Commit**
+- [ ] **Step 5: Commit**
 
 Run:
 
 ```bash
 git add python_scripts/png_fnl_validation.py tests/test_png_fnl_validation.py
-git commit -m "test: validate hod bphi prior behavior"
+git commit -m "test: validate non-gaussian bphi priors"
 ```
 
 Expected: commit succeeds.
 
 ---
 
-### Task 4: Validate No-`bphi` Non-Identifiability
-
-**Files:**
-- Modify: `python_scripts/png_fnl_validation.py`
-- Modify: `tests/test_png_fnl_validation.py`
-
-- [ ] **Step 1: Add failing test showing broad `bphi` priors drive `fnl_loc` posterior width**
-
-Append to `tests/test_png_fnl_validation.py`:
-
-```python
-def test_no_bphi_prior_limit_is_prior_volume_dependent():
-    fnl_grid = np.linspace(-300.0, 300.0, 2401)
-    widths = []
-    for bphi_scale in [1.0, 5.0, 20.0]:
-        logposterior = hod_bphi_prior_logposterior(
-            fnl_grid=fnl_grid,
-            bfnl_obs=np.array([120.0]),
-            bfnl_sigma=np.array([12.0]),
-            bphi_locs=np.array([3.0]),
-            bphi_scales=np.array([bphi_scale]),
-            fnl_limit=300.0,
-            beta_floor=1.0e-6,
-        )
-        _, std = posterior_mean_and_std(fnl_grid, logposterior)
-        widths.append(std)
-    assert widths[1] > widths[0]
-    assert widths[2] > widths[1]
-```
-
-- [ ] **Step 2: Run the test**
-
-Run:
-
-```bash
-pytest tests/test_png_fnl_validation.py::test_no_bphi_prior_limit_is_prior_volume_dependent -q
-```
-
-Expected: PASS using the Task 3 implementation. If it fails, inspect whether the grid is too narrow or the posterior is prior-bound; widen `fnl_grid` to `[-600, 600]` and `fnl_limit` to `600`.
-
-- [ ] **Step 3: Add a helper label for reporting non-identifiability**
-
-Append to `python_scripts/png_fnl_validation.py`:
-
-```python
-def no_bphi_prior_message():
-    return (
-        "Without a bphi prior or relation, fnl_loc is not identified by P(k): "
-        "the data constrain bfnl_loc = bphi * fnl_loc."
-    )
-```
-
-- [ ] **Step 4: Add test for the reporting message**
-
-Append to `tests/test_png_fnl_validation.py`:
-
-```python
-from python_scripts.png_fnl_validation import no_bphi_prior_message
-
-
-def test_no_bphi_prior_message_names_identifiability_problem():
-    message = no_bphi_prior_message()
-    assert "not identified" in message
-    assert "bfnl_loc = bphi * fnl_loc" in message
-```
-
-- [ ] **Step 5: Run full validation unit tests**
-
-Run:
-
-```bash
-pytest tests/test_png_fnl_validation.py -q
-```
-
-Expected: all tests pass.
-
-- [ ] **Step 6: Commit**
-
-Run:
-
-```bash
-git add python_scripts/png_fnl_validation.py tests/test_png_fnl_validation.py
-git commit -m "test: document no-bphi non-identifiability"
-```
-
-Expected: commit succeeds.
-
----
-
-### Task 5: Add Real-Output Validation CLI
+### Task 5: Add grid and mcmc CLI Skeleton
 
 **Files:**
 - Create: `python_scripts/validate_png_fnl_assumptions.py`
 - Modify: `tests/test_png_fnl_validation.py`
 
-- [ ] **Step 1: Add failing CLI smoke test**
+- [ ] **Step 1: Add failing CLI smoke tests**
 
 Append to `tests/test_png_fnl_validation.py`:
 
@@ -574,7 +660,7 @@ import subprocess
 import sys
 
 
-def test_validation_cli_help_runs():
+def test_validation_cli_help_lists_grid_and_mcmc_modes():
     result = subprocess.run(
         [sys.executable, "python_scripts/validate_png_fnl_assumptions.py", "--help"],
         check=False,
@@ -582,26 +668,43 @@ def test_validation_cli_help_runs():
         capture_output=True,
     )
     assert result.returncode == 0
-    assert "Validate PNG fnl_loc assumption comparisons" in result.stdout
+    assert "grid" in result.stdout
+    assert "mcmc" in result.stdout
+
+
+def test_validation_cli_grid_mode_writes_report(tmp_path):
+    output = tmp_path / "grid_report.txt"
+    result = subprocess.run(
+        [sys.executable, "python_scripts/validate_png_fnl_assumptions.py", "grid", "--output", str(output)],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0
+    text = output.read_text(encoding="utf-8")
+    assert "Grid validation report" in text
+    assert "approach_a_vs_b_max_abs_cdf_diff" in text
 ```
 
-- [ ] **Step 2: Run the CLI smoke test to verify it fails**
+- [ ] **Step 2: Run CLI tests to verify they fail**
 
 Run:
 
 ```bash
-pytest tests/test_png_fnl_validation.py::test_validation_cli_help_runs -q
+pytest tests/test_png_fnl_validation.py::test_validation_cli_help_lists_grid_and_mcmc_modes tests/test_png_fnl_validation.py::test_validation_cli_grid_mode_writes_report -q
 ```
 
 Expected: FAIL because `python_scripts/validate_png_fnl_assumptions.py` does not exist.
 
-- [ ] **Step 3: Create CLI skeleton**
+- [ ] **Step 3: Create CLI with grid and mcmc subcommands**
 
 Create `python_scripts/validate_png_fnl_assumptions.py` with:
 
 ```python
 #!/usr/bin/env python3
-"""Validate PNG fnl_loc assumption comparisons from synthetic inputs or pipeline outputs."""
+"""Validate PNG fnl_loc inference paths."""
+
+from __future__ import annotations
 
 import argparse
 from pathlib import Path
@@ -609,70 +712,84 @@ from pathlib import Path
 import numpy as np
 
 from png_fnl_validation import (
+    GaussianBphiPrior,
+    approach_a_direct_bphi_grid_logposterior,
+    approach_b_bfnl_grid_logposterior,
     compare_posteriors,
-    fixed_p_direct_logposterior,
-    fixed_p_from_bfnl_logposterior,
-    hod_bphi_prior_logposterior,
-    no_bphi_prior_message,
-    normalize_logpdf_on_grid,
 )
 
 
 def build_parser():
     parser = argparse.ArgumentParser(description="Validate PNG fnl_loc assumption comparisons.")
-    parser.add_argument("--output", default="png_fnl_validation_report.txt", help="Path to write the validation report.")
-    parser.add_argument("--synthetic", action="store_true", help="Run built-in synthetic validation cases.")
+    subparsers = parser.add_subparsers(dest="mode", required=True)
+
+    grid = subparsers.add_parser("grid", help="Run deterministic quadrature validation without sampler noise.")
+    grid.add_argument("--output", default="png_fnl_grid_validation_report.txt")
+
+    mcmc = subparsers.add_parser("mcmc", help="Compare real desilike direct-bphi and bfnl pipeline chains.")
+    mcmc.add_argument("--direct-bphi-chain", required=True)
+    mcmc.add_argument("--bfnl-chain", required=True)
+    mcmc.add_argument("--output", default="png_fnl_mcmc_validation_report.txt")
     return parser
 
 
-def run_synthetic_report():
+def run_grid_report():
     fnl_grid = np.linspace(-300.0, 300.0, 2401)
-    b1_grid = np.linspace(1.0, 3.0, 801)
-    direct = fixed_p_direct_logposterior(
+    beta_grid = np.linspace(-1.0, 7.0, 2001)
+    bfnl_obs = np.array([120.0, 80.0])
+    bfnl_sigma = np.array([12.0, 16.0])
+    priors = [GaussianBphiPrior(3.0, 0.4), GaussianBphiPrior(2.0, 0.3)]
+    direct = approach_a_direct_bphi_grid_logposterior(
         fnl_grid=fnl_grid,
-        b1_grid=b1_grid,
-        bfnl_obs=134.88,
-        bfnl_sigma=35.0,
-        b1_obs=2.0,
-        b1_sigma=0.12,
-        p_fixed=1.0,
+        beta_grid=beta_grid,
+        bfnl_obs=bfnl_obs,
+        bfnl_sigma=bfnl_sigma,
+        bphi_priors=priors,
+        fnl_limits=(-300.0, 300.0),
     )
-    postprocessed = fixed_p_from_bfnl_logposterior(
+    postprocessed = approach_b_bfnl_grid_logposterior(
         fnl_grid=fnl_grid,
-        b1_grid=b1_grid,
-        bfnl_obs=134.88,
-        bfnl_sigma=35.0,
-        b1_obs=2.0,
-        b1_sigma=0.12,
-        p_fixed=1.0,
+        beta_grid=beta_grid,
+        bfnl_obs=bfnl_obs,
+        bfnl_sigma=bfnl_sigma,
+        bphi_priors=priors,
+        fnl_limits=(-300.0, 300.0),
     )
-    closure = compare_posteriors(fnl_grid, direct, postprocessed)
-    hod = hod_bphi_prior_logposterior(
-        fnl_grid=fnl_grid,
-        bfnl_obs=np.array([120.0]),
-        bfnl_sigma=np.array([12.0]),
-        bphi_locs=np.array([3.0]),
-        bphi_scales=np.array([0.3]),
-        beta_floor=1.0e-6,
-    )
-    hod_pdf = normalize_logpdf_on_grid(fnl_grid, hod)
-    hod_mean = float(np.trapz(fnl_grid * hod_pdf, fnl_grid))
-    hod_std = float(np.sqrt(np.trapz((fnl_grid - hod_mean) ** 2 * hod_pdf, fnl_grid)))
+    metrics = compare_posteriors(fnl_grid, direct, postprocessed)
     return [
-        "Synthetic PNG fnl validation report",
-        f"fixed_p_closure_max_abs_cdf_diff = {closure['max_abs_cdf_diff']:.6e}",
-        f"fixed_p_closure_mean_abs_pdf_diff = {closure['mean_abs_pdf_diff']:.6e}",
-        f"hod_prior_fnl_mean = {hod_mean:.6f}",
-        f"hod_prior_fnl_std = {hod_std:.6f}",
-        no_bphi_prior_message(),
+        "Grid validation report",
+        "mode = grid",
+        "purpose = deterministic quadrature without sampler noise",
+        f"approach_a_vs_b_max_abs_cdf_diff = {metrics['max_abs_cdf_diff']:.6e}",
+        f"approach_a_vs_b_mean_abs_pdf_diff = {metrics['mean_abs_pdf_diff']:.6e}",
+    ]
+
+
+def run_mcmc_report(args):
+    direct_chain = Path(args.direct_bphi_chain)
+    bfnl_chain = Path(args.bfnl_chain)
+    if not direct_chain.exists():
+        raise FileNotFoundError(f"Direct bphi chain does not exist: {direct_chain}")
+    if not bfnl_chain.exists():
+        raise FileNotFoundError(f"bfnl chain does not exist: {bfnl_chain}")
+    return [
+        "MCMC validation report",
+        "mode = mcmc",
+        "purpose = real desilike chain comparison",
+        f"direct_bphi_chain = {direct_chain}",
+        f"bfnl_chain = {bfnl_chain}",
+        "status = chain paths validated; posterior comparison is implemented in Task 6",
     ]
 
 
 def main():
     args = build_parser().parse_args()
-    if not args.synthetic:
-        raise SystemExit("Use --synthetic for the initial validation report mode.")
-    lines = run_synthetic_report()
+    if args.mode == "grid":
+        lines = run_grid_report()
+    elif args.mode == "mcmc":
+        lines = run_mcmc_report(args)
+    else:
+        raise SystemExit(f"Unknown mode: {args.mode}")
     output = Path(args.output)
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Wrote {output}")
@@ -682,151 +799,230 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 4: Run CLI smoke test**
+- [ ] **Step 4: Run CLI tests**
 
 Run:
 
 ```bash
-pytest tests/test_png_fnl_validation.py::test_validation_cli_help_runs -q
+pytest tests/test_png_fnl_validation.py::test_validation_cli_help_lists_grid_and_mcmc_modes tests/test_png_fnl_validation.py::test_validation_cli_grid_mode_writes_report -q
 ```
 
-Expected: PASS.
+Expected: `2 passed`.
 
-- [ ] **Step 5: Run synthetic validation report**
-
-Run:
-
-```bash
-python python_scripts/validate_png_fnl_assumptions.py --synthetic --output /tmp/png_fnl_validation_report.txt
-```
-
-Expected: prints `Wrote /tmp/png_fnl_validation_report.txt`.
-
-- [ ] **Step 6: Inspect report**
-
-Run:
-
-```bash
-sed -n '1,120p' /tmp/png_fnl_validation_report.txt
-```
-
-Expected output contains:
-
-```text
-Synthetic PNG fnl validation report
-fixed_p_closure_max_abs_cdf_diff =
-hod_prior_fnl_mean =
-Without a bphi prior or relation, fnl_loc is not identified by P(k)
-```
-
-- [ ] **Step 7: Commit**
+- [ ] **Step 5: Commit**
 
 Run:
 
 ```bash
 git add python_scripts/validate_png_fnl_assumptions.py tests/test_png_fnl_validation.py
-git commit -m "feat: add png fnl validation report cli"
+git commit -m "feat: add png fnl validation cli"
 ```
 
 Expected: commit succeeds.
 
 ---
 
-### Task 6: Document Validation Strategy
+### Task 6: Implement mcmc Chain Comparison for Real desilike Outputs
+
+**Files:**
+- Modify: `python_scripts/png_fnl_validation.py`
+- Modify: `python_scripts/validate_png_fnl_assumptions.py`
+- Modify: `tests/test_png_fnl_validation.py`
+
+- [ ] **Step 1: Add tests for weighted histogram comparison helpers**
+
+Append to `tests/test_png_fnl_validation.py`:
+
+```python
+from python_scripts.png_fnl_validation import (
+    histogram_logposterior_from_samples,
+    posterior_summary,
+)
+
+
+def test_histogram_logposterior_from_samples_normalizes_to_one():
+    rng = np.random.default_rng(42)
+    samples = rng.normal(loc=10.0, scale=3.0, size=5000)
+    grid = np.linspace(-10.0, 30.0, 801)
+    logposterior = histogram_logposterior_from_samples(samples=samples, grid=grid)
+    pdf = normalize_logpdf_on_grid(grid, logposterior)
+    assert np.allclose(np.trapz(pdf, grid), 1.0, atol=2.0e-4)
+
+
+def test_posterior_summary_reports_mean_and_std():
+    grid = np.linspace(-20.0, 20.0, 1601)
+    logposterior = gaussian_logpdf(grid, loc=3.0, scale=2.0)
+    summary = posterior_summary(grid, logposterior)
+    assert abs(summary["mean"] - 3.0) < 0.05
+    assert abs(summary["std"] - 2.0) < 0.05
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run:
+
+```bash
+pytest tests/test_png_fnl_validation.py::test_histogram_logposterior_from_samples_normalizes_to_one tests/test_png_fnl_validation.py::test_posterior_summary_reports_mean_and_std -q
+```
+
+Expected: FAIL with `ImportError` for the new helper functions.
+
+- [ ] **Step 3: Implement histogram and summary helpers**
+
+Append to `python_scripts/png_fnl_validation.py`:
+
+```python
+def histogram_logposterior_from_samples(samples, grid, weights=None):
+    samples = np.asarray(samples, dtype="f8")
+    grid = np.asarray(grid, dtype="f8")
+    if samples.ndim != 1:
+        raise ValueError("samples must be one-dimensional.")
+    centers = grid
+    edges = np.empty(grid.size + 1, dtype="f8")
+    edges[1:-1] = 0.5 * (centers[1:] + centers[:-1])
+    edges[0] = centers[0] - 0.5 * (centers[1] - centers[0])
+    edges[-1] = centers[-1] + 0.5 * (centers[-1] - centers[-2])
+    hist, _ = np.histogram(samples, bins=edges, weights=weights, density=False)
+    hist = np.asarray(hist, dtype="f8")
+    hist += 0.5
+    pdf = hist / np.trapz(hist, grid)
+    return np.log(pdf)
+
+
+def posterior_summary(grid, logposterior):
+    grid = np.asarray(grid, dtype="f8")
+    pdf = normalize_logpdf_on_grid(grid, logposterior)
+    mean = float(np.trapz(grid * pdf, grid))
+    var = float(np.trapz((grid - mean) ** 2 * pdf, grid))
+    return {"mean": mean, "std": var**0.5}
+```
+
+- [ ] **Step 4: Extend the mcmc CLI to load real desilike chains**
+
+Modify `python_scripts/validate_png_fnl_assumptions.py` so `run_mcmc_report(args)` becomes:
+
+```python
+def _load_desilike_param(chain_path, basename):
+    from desilike.samples import Chain
+
+    chain = Chain.load(str(chain_path))
+    matches = [str(param) for param in chain.params() if getattr(param, "basename", None) == basename]
+    if not matches:
+        raise ValueError(f"No parameter with basename {basename!r} found in {chain_path}")
+    if basename == "fnl_loc" and len(matches) == 1:
+        return np.asarray(chain[matches[0]], dtype="f8")
+    raise ValueError(f"Expected exactly one {basename!r} parameter in {chain_path}; found {matches}")
+
+
+def run_mcmc_report(args):
+    from png_fnl_validation import histogram_logposterior_from_samples, posterior_summary
+
+    direct_chain = Path(args.direct_bphi_chain)
+    bfnl_chain = Path(args.bfnl_chain)
+    if not direct_chain.exists():
+        raise FileNotFoundError(f"Direct bphi chain does not exist: {direct_chain}")
+    if not bfnl_chain.exists():
+        raise FileNotFoundError(f"bfnl chain does not exist: {bfnl_chain}")
+    direct_fnl = _load_desilike_param(direct_chain, "fnl_loc")
+    grid = np.linspace(float(np.nanmin(direct_fnl)), float(np.nanmax(direct_fnl)), 1001)
+    direct_logposterior = histogram_logposterior_from_samples(direct_fnl, grid=grid)
+    direct_summary = posterior_summary(grid, direct_logposterior)
+    return [
+        "MCMC validation report",
+        "mode = mcmc",
+        "purpose = real desilike chain comparison",
+        f"direct_bphi_chain = {direct_chain}",
+        f"bfnl_chain = {bfnl_chain}",
+        f"direct_fnl_mean = {direct_summary['mean']:.6f}",
+        f"direct_fnl_std = {direct_summary['std']:.6f}",
+        "status = direct chain fnl_loc marginal loaded; bfnl post-processing inputs must be added from real bphi prior files in Task 7",
+    ]
+```
+
+- [ ] **Step 5: Run helper tests**
+
+Run:
+
+```bash
+pytest tests/test_png_fnl_validation.py::test_histogram_logposterior_from_samples_normalizes_to_one tests/test_png_fnl_validation.py::test_posterior_summary_reports_mean_and_std -q
+```
+
+Expected: `2 passed`.
+
+- [ ] **Step 6: Commit**
+
+Run:
+
+```bash
+git add python_scripts/png_fnl_validation.py python_scripts/validate_png_fnl_assumptions.py tests/test_png_fnl_validation.py
+git commit -m "feat: add real-chain validation helpers"
+```
+
+Expected: commit succeeds.
+
+---
+
+### Task 7: Document Validation Strategy
 
 **Files:**
 - Modify: `python_scripts/README.md`
+- Modify: `docs/superpowers/plans/fnl_sampling_implementation_validation_plan.md`
 
-- [ ] **Step 1: Add validation strategy notes**
+- [ ] **Step 1: Append validation strategy notes to python_scripts README**
 
-Append this section to `python_scripts/README.md`:
+Append to `python_scripts/README.md`:
 
 ```markdown
 ## fnl_loc Posterior Validation Strategy
 
-The main comparison should distinguish the data-constrained amplitude from the assumptions used to infer `fnl_loc`.
+The validation distinguishes two inference paths for the same one-dimensional marginalized `fnl_loc` posterior.
 
-- The P(k) likelihood primarily constrains `bfnl_loc = bphi * fnl_loc`.
-- The fixed-`p` universality validation compares direct `b-p` sampling against the equivalent constrained post-processing of `bfnl_loc`; matching posteriors validate that the `fnl_loc` recovery is not an artifact of parameterization.
-- The HOD-informed validation applies Gaussian `bphi` priors in the forward conditional form `bfnl_loc | fnl_loc ~ N(fnl_loc * mu_bphi, bfnl_sigma^2 + fnl_loc^2 * sigma_bphi^2)`, avoiding explicit division by `fnl_loc`.
-- The no-`bphi` case should not be presented as a well-defined `fnl_loc` posterior. It should be presented as a `bfnl_loc` constraint, plus a demonstration that any `fnl_loc` posterior is prior-volume dependent.
+- **Approach A: direct bphi sampling** samples `fnl_loc` and one `bphi_z` parameter per redshift bin with explicit priors.
+- **Approach B: bfnl sampling plus bphi marginalization** runs `mode="bfnl"` to constrain one `bfnl_z = bphi_z * fnl_loc` amplitude per redshift bin, then marginalizes over the external `bphi_z` prior for each bin.
+- Redshift-bin `fnl_loc` likelihood curves are multiplied across bins, and the common `fnl_loc` prior is applied exactly once.
+- `grid` mode is deterministic quadrature for checking the transformation math without sampler noise.
+- `mcmc` mode compares real desilike pipeline chains only.
+- Non-Gaussian `bphi_z` priors are represented by weighted samples or tabulated log-density inputs.
 
-Fast synthetic checks live in `tests/test_png_fnl_validation.py`. The report CLI is:
+The main validation command is:
 
 ```bash
-python python_scripts/validate_png_fnl_assumptions.py --synthetic --output /tmp/png_fnl_validation_report.txt
+python python_scripts/validate_png_fnl_assumptions.py grid --output /tmp/png_fnl_grid_validation_report.txt
 ```
 ```
 
-- [ ] **Step 2: Run README grep check**
+- [ ] **Step 2: Run documentation grep checks**
 
 Run:
 
 ```bash
-rg -n "fnl_loc Posterior Validation Strategy|bfnl_loc = bphi \\* fnl_loc|prior-volume dependent" python_scripts/README.md
+rg -n "Approach A|Approach B|grid mode|mcmc mode|weighted samples|tabulated log-density" docs/superpowers/plans/fnl_sampling_implementation_validation_plan.md python_scripts/README.md
 ```
 
-Expected: all three phrases are found.
+Expected: output contains all six phrases.
 
-- [ ] **Step 3: Run full validation tests**
+- [ ] **Step 3: Commit**
 
 Run:
 
 ```bash
-pytest tests/test_png_fnl_validation.py -q
-```
-
-Expected: all tests pass.
-
-- [ ] **Step 4: Commit**
-
-Run:
-
-```bash
-git add python_scripts/README.md
-git commit -m "docs: describe png fnl validation strategy"
+git add python_scripts/README.md docs/superpowers/plans/fnl_sampling_implementation_validation_plan.md
+git commit -m "docs: document fnl validation strategy"
 ```
 
 Expected: commit succeeds.
 
 ---
 
-## Final Verification
+## Self-Review Checklist for Implementing Agents
 
-- [ ] **Step 1: Run all validation tests**
+Before claiming the plan is complete, verify:
 
-Run:
-
-```bash
-pytest tests/test_png_fnl_validation.py -q
-```
-
-Expected: all tests pass.
-
-- [ ] **Step 2: Run synthetic validation CLI**
-
-Run:
-
-```bash
-python python_scripts/validate_png_fnl_assumptions.py --synthetic --output /tmp/png_fnl_validation_report.txt
-```
-
-Expected: command exits with status `0` and writes the report.
-
-- [ ] **Step 3: Confirm working tree**
-
-Run:
-
-```bash
-git status --short
-```
-
-Expected: no uncommitted changes after the final commit.
+- `grid` mode never invokes a sampler.
+- `mcmc` mode does not generate synthetic chains.
+- Approach B never computes an unweighted `bfnl / bphi` sample ratio.
+- The `fnl_loc` prior is applied once after multiplying independent redshift-bin likelihood curves.
+- Both non-Gaussian `bphi_z` prior representations are covered by tests.
+- The primary comparison metric is the one-dimensional marginalized `fnl_loc` posterior.
 
 ---
-
-## Self-Review Notes
-
-- Spec coverage: The plan covers fixed-`p` direct versus `bfnl` post-processing closure, HOD Gaussian `bphi` prior behavior, near-zero `fnl_loc` handling, and no-`bphi` non-identifiability.
-- Placeholder scan: No placeholder steps are left; each code-writing step includes concrete code and each verification step includes a command and expected result.
-- Type consistency: Function names imported in tests match functions introduced in `python_scripts/png_fnl_validation.py`; the CLI imports only functions created by earlier tasks.
