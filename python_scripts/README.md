@@ -77,20 +77,32 @@ Focused on debugging and stabilizing the PNG/bphi prior fitting workflow, improv
 ## fnl_loc Validation Strategy
 
 - **Scenario A: bfnl baseline** runs desilike `mode="bfnl"` and samples one
-  `bfnl_z = bphi_z * fnl_loc` amplitude per independent tracer/redshift bin,
-  with no `bphi_z` prior and no universal sampled `fnl_loc`.
+  product amplitude `B_i = b_{\phi,i} fnl_loc` per independent tracer/redshift
+  bin, with no `bphi_i` prior and no universal sampled `fnl_loc`. In code this
+  product amplitude is usually named `bfnl_z` or `bfnl_loc`.
 - **Scenario B: HOD-informed Gaussian bphi prior** targets one universal
-  `fnl_loc`. Validate both B-direct (`mode="bphi"` sampling of `fnl_loc` and
-  each `bphi_z`) and B-marginal (custom likelihood marginalizing each Gaussian
-  `bphi_z` prior) before selecting the official implementation.
+  `fnl_loc` with one Gaussian HOD prior
+  `pi_i(beta_i) = Normal(beta_i; mu_bphi_i, sigma_bphi_i^2)` for each
+  `bphi_i`. Validate both B-direct (`mode="bphi"` sampling of `fnl_loc` and
+  each `bphi_i`) and B-marginal (custom likelihood marginalizing each Gaussian
+  `bphi_i` prior) before selecting the official implementation.
 - **Scenario C: fixed-p universality** fixes
   `bphi_i = 2 delta_c (b1_i - p_i)` with tracer/sample-specific fixed `p_i`
   values and samples one universal `fnl_loc`.
+- B-marginal follows the `paper/main.tex` appendix formalism:
+  `L_i^marg(f) = integral d beta_i L_i(B_i = f beta_i) pi_i(beta_i)`, followed
+  by one common `fnl_loc` prior after multiplying independent bin likelihoods.
+- If both `L_i(B_i)` and the Gaussian `bphi_i` prior are Gaussian, use the
+  analytic Gaussian-Gaussian expression from `Bhat_i`, `sigma_B_i`,
+  `mu_bphi_i`, and `sigma_bphi_i`; Gauss-Hermite quadrature is not needed.
+- If the Gaussian `bphi_i` prior is kept but `L_i(B_i)` is numerical,
+  Gauss-Hermite quadrature implements the same marginalization integral.
 - `grid` mode is deterministic quadrature for checking transformation math
   without sampler noise.
 - `mcmc` mode compares real desilike pipeline chains only.
-- Non-Gaussian `bphi_z` priors are represented by weighted samples or tabulated
-  log-density inputs.
+- Non-Gaussian `bphi_i` priors are represented by weighted samples or tabulated
+  log-density inputs and use their own integration weights, not Gauss-Hermite
+  weights.
 
 ## AbacusHOD Runtime Update
 - Diagnosed the `bash HOD_one_lhc.sh 0 SU` failure from AbacusHOD:

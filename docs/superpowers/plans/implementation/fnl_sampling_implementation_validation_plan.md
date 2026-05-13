@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. This plan is written for AI agents: follow the constraints exactly, keep edits scoped to the listed files, and do not reinterpret statistical terms.
 
-**Goal:** Implement and validate the benchmark scenarios used for the paper-level `fnl_loc` comparison, with explicit scope for the data vector, covariance, and redshift-space HOD mock convention.
+**Goal:** Implement and validate the benchmark scenarios used for the paper-level `\fnl` comparison, with explicit scope for the data vector, covariance, redshift-space HOD mock convention, and the marginal-likelihood formalism in `paper/main.tex`.
 
-**Architecture:** Add validation tooling around the existing desilike-based PNG pipeline. The production data vector is the joint galaxy power-spectrum multipole vector `(P_0, P_2)`, i.e. monopole and quadrupole, using the Gaussian covariance supplied by `thecov` for the same joint vector. Validation has two execution modes: `grid` uses deterministic quadrature to isolate probability transformations, while `mcmc` consumes only real desilike pipeline chains and compares the resulting one-dimensional marginalized `fnl_loc` posteriors.
+**Architecture:** Add validation tooling around the existing desilike-based PNG pipeline. The production data vector is the joint galaxy power-spectrum multipole vector `(P_0, P_2)`, i.e. monopole and quadrupole, using the Gaussian covariance supplied by `thecov` for the same joint vector. Validation has two execution modes: `grid` uses deterministic quadrature to isolate probability transformations, while `mcmc` consumes only real desilike pipeline chains and compares the resulting one-dimensional marginalized `fnl_loc` posteriors. The notation follows the draft: the data-constrained product amplitude is `B_i = b_{\phi,i}\fnl`, desilike's `bfnl_z` is the implementation name for `B_i`, and the HOD-informed prior has mean `mu_bphi_i` and width `sigma_bphi_i`.
 
 **Tech Stack:** Python, NumPy, pytest, existing `python_scripts/bphi_prior_pipeline.py` naming conventions, optional desilike chain loading for real-output validation.
 
@@ -20,40 +20,54 @@ d_z = [P_0^g(k), P_2^g(k)]
 
 for each tracer/redshift sample. The likelihood must fit `ell = 0` and `ell = 2` jointly, using the matching Gaussian covariance from `thecov`. Do not treat the quadrupole as a diagnostic-only output once this plan is implemented.
 
-The PNG amplitude constrained most directly by the large-scale data is the redshift-bin product
+The PNG amplitude constrained most directly by the large-scale data is the bin-level product amplitude
 
 ```text
-B_z = bfnl_z = bphi_z * fnl_loc
+B_i = bfnl_z = bphi_i * fnl_loc
 ```
 
-not `fnl_loc` alone. The benchmark scenarios are:
+where `B_i` is the paper notation, `bfnl_z` is the desilike/code-facing parameter name, and `fnl_loc` is the code-facing name for `\fnl`. This amplitude, not `fnl_loc` alone, is what the large-scale data constrain without an external `bphi_i` assumption. The benchmark scenarios are:
 
-- **Scenario A, bfnl baseline:** run desilike `mode="bfnl"` and sample one `bfnl_z` amplitude per independent tracer/redshift bin, with no `bphi_z` prior and no universal sampled `fnl_loc`. Scenario A is reported and validated at the individual-bin `bfnl_z` level.
-- **Scenario B, HOD-informed Gaussian bphi prior:** infer one universal `fnl_loc` with one Gaussian HOD prior on each `bphi_z`. Two candidate implementation strategies must be benchmarked before choosing the official Scenario B implementation:
+- **Scenario A, bfnl baseline:** run desilike `mode="bfnl"` and sample one `B_i` amplitude (`bfnl_z` in code) per independent tracer/redshift bin, with no `bphi_i` prior and no universal sampled `fnl_loc`. Scenario A is reported and validated at the individual-bin `B_i`/`bfnl_z` level.
+- **Scenario B, HOD-informed Gaussian bphi prior:** infer one universal `fnl_loc` with one Gaussian HOD prior on each `bphi_i`, `pi_i(beta_i) = Normal(beta_i; mu_bphi_i, sigma_bphi_i^2)`. Two candidate implementation strategies must be benchmarked before choosing the official Scenario B implementation:
   - **B-direct:** desilike `mode="bphi"` samples `b1_z`, `bphi_z`, and the universal `fnl_loc` directly.
-  - **B-marginal:** a custom likelihood wrapper samples `b1_z` and universal `fnl_loc` while one-dimensionally marginalizing each Gaussian `bphi_z` prior, e.g. with Gauss-Hermite quadrature.
+  - **B-marginal:** a custom likelihood wrapper samples `b1_z` and universal `fnl_loc` while one-dimensionally marginalizing each Gaussian `bphi_i` prior. If the one-dimensional product-amplitude likelihood `L_i(B_i)` is kept numerical, use Gauss-Hermite quadrature for the Gaussian `bphi_i` prior; if `L_i(B_i)` is approximated as Gaussian, use the closed-form expression below.
 - **Scenario C, fixed-p universality:** run the fixed-`p_i` relation `bphi_i = 2 delta_c (b1_i - p_i)`, using tracer/sample-specific fixed `p_i` values for LRG, ELG, and QSO, and infer one universal `fnl_loc`.
 
-Scenario B marginalization and Scenario A post-processing utilities convert each independent redshift-bin `bfnl_z` constraint into an `fnl_loc` likelihood curve,
+Scenario B marginalization and Scenario A post-processing utilities convert each independent bin-level `B_i` (`bfnl_z` in code) constraint into an `fnl_loc` likelihood curve,
 
 ```text
-L_z(f) = integral d beta_z L_z(B_z = f beta_z) pi_z(beta_z)
+L_i^marg(f) = integral d beta_i L_i(B_i = f beta_i) pi_i(beta_i)
 ```
 
 then multiplies the redshift-bin likelihood curves and applies the common `fnl_loc` prior exactly once:
 
 ```text
-P(f | all data) proportional to pi(f) product_z L_z(f)
+P(f | all data) proportional to pi(f) product_i L_i^marg(f)
 ```
 
-For Gaussian `bfnl_z` likelihoods and Gaussian `bphi_z` priors, this marginalization has the analytic form:
+For Gaussian product-amplitude likelihoods and Gaussian `bphi_i` priors, this marginalization has the analytic form:
 
 ```text
-Bhat_z | f ~ Normal(f * mu_beta,z,
-                    sqrt(sigma_B,z^2 + f^2 sigma_beta,z^2))
+L_i(B_i) proportional to Normal(B_i; Bhat_i, sigma_B_i^2)
+pi_i(beta_i) = Normal(beta_i; mu_bphi_i, sigma_bphi_i^2)
+
+Bhat_i | f ~ Normal(f * mu_bphi_i,
+                    sigma_B_i^2 + f^2 sigma_bphi_i^2)
 ```
 
-For non-Gaussian `bphi_z` priors, the same integral must be evaluated numerically from either weighted `bphi_z` samples or a tabulated `bphi_z` log-density. The validation target is the `fnl_loc` marginal only; B-marginal is not required to reproduce B-direct's sampled `bphi_z` marginals.
+Equivalently, evaluate the paper's Eq. A.6 directly from `Bhat_i`, `sigma_B_i`, `mu_bphi_i`, and `sigma_bphi_i`; no numerical quadrature is needed in this Gaussian-Gaussian limit.
+
+If the Gaussian `bphi_i` prior is retained but `L_i(B_i)` is evaluated as a numerical one-dimensional likelihood rather than replaced by a Gaussian approximation, use Gauss-Hermite quadrature:
+
+```text
+L_i^marg(f) ~= 1 / sqrt(pi) * sum_n w_n
+              L_i(B_i = f * [mu_bphi_i + sqrt(2) * sigma_bphi_i * x_n])
+```
+
+where `x_n, w_n` integrate functions against `exp(-x^2)`. This is a numerical implementation of the same marginalization integral, not an extra prior assumption.
+
+For non-Gaussian `bphi_i` priors, the same integral must be evaluated numerically from either weighted `bphi_i` samples or a tabulated `bphi_i` log-density; do not use Gauss-Hermite weights unless the prior is Gaussian. The validation target is the `fnl_loc` marginal only; B-marginal is not required to reproduce B-direct's sampled `bphi_i` marginals.
 
 The HOD mock catalog convention must be explicit in the implementation and validation:
 
@@ -65,11 +79,11 @@ The HOD mock catalog convention must be explicit in the implementation and valid
 
 ## Non-Negotiable Constraints for Implementing Agents
 
-- Use `B_z`, `bfnl_z`, and `bfnl_loc` for the data-constrained product `bphi_z * fnl_loc`.
+- Use `B_i` for the paper formalism and `bfnl_z`/`bfnl_loc` only for desilike/code-facing names of the data-constrained product `bphi_i * fnl_loc`.
 - Do not use "Approach A/B" as benchmark scenario names. Use Scenario A/B/C for science cases and B-direct/B-marginal for Scenario B implementation strategies.
-- Scenario A means `mode="bfnl"` inference over one `bfnl_z` amplitude per independent tracer/redshift bin, with no `bphi_z` prior and no universal sampled `fnl_loc`.
-- B-direct means direct joint inference over one universal `fnl_loc` and one `bphi_z` nuisance parameter per tracer/redshift bin.
-- B-marginal means inference over one universal `fnl_loc` while marginalizing each external `bphi_z` prior inside the likelihood.
+- Scenario A means `mode="bfnl"` inference over one `B_i`/`bfnl_z` amplitude per independent tracer/redshift bin, with no `bphi_i` prior and no universal sampled `fnl_loc`.
+- B-direct means direct joint inference over one universal `fnl_loc` and one `bphi_i` nuisance parameter per tracer/redshift bin.
+- B-marginal means inference over one universal `fnl_loc` while marginalizing each external `bphi_i` prior inside the likelihood using the `L_i^marg(fnl_loc)` construction in `paper/main.tex`.
 - Scenario C means fixed-p inference with `bphi_i = 2 delta_c (b1_i - p_i)`, where `p_i` is fixed per tracer/sample.
 - B-marginal and any Scenario A post-processing utility must not use unweighted sample-by-sample ratios such as `fnl = bfnl / bphi`.
 - Redshift bins are independent in this plan.
@@ -77,9 +91,9 @@ The HOD mock catalog convention must be explicit in the implementation and valid
 - Validation focuses on the one-dimensional marginalized `fnl_loc` posterior for Scenarios B and C, and on individual-bin `bfnl_z` agreement for Scenario A.
 - The production data vector is `(ell=0, ell=2)` galaxy power-spectrum multipoles, fitted jointly with the matching `thecov` Gaussian covariance.
 - For HOD mocks used to build or validate redshift-space clustering, the implementation must record whether catalog positions are already in redshift space and must guard against double RSD shifting.
-- `grid` mode uses deterministic quadrature only. It is not a production sampler.
+- `grid` mode uses deterministic quadrature only. It is not a production sampler. It may use beta-grid integration for validation, even when a production Gaussian-prior wrapper would use Gauss-Hermite nodes.
 - `mcmc` mode loads real desilike pipeline chains only. Do not add synthetic MCMC chain generation.
-- Non-Gaussian `bphi_z` priors must be accepted in both forms:
+- Non-Gaussian `bphi_i` priors must be accepted in both forms:
   - weighted samples: `beta_samples_z`, `weights_z`
   - tabulated log-density: `beta_grid_z`, `logpdf_z`
 - KDE smoothing is allowed only outside this validation module; if used, it must produce a tabulated log-density before entering the module.
@@ -1072,13 +1086,15 @@ Append to `python_scripts/README.md`:
 
 The validation distinguishes three benchmark scenarios and two candidate implementations for Scenario B.
 
-- **Scenario A: bfnl baseline** runs `mode="bfnl"` to constrain one `bfnl_z = bphi_z * fnl_loc` amplitude per independent tracer/redshift bin, with no `bphi_z` prior and no universal sampled `fnl_loc`.
-- **Scenario B: HOD-informed Gaussian bphi prior** targets one universal `fnl_loc`. Validate both B-direct (`mode="bphi"` sampling of `fnl_loc` and each `bphi_z`) and B-marginal (custom likelihood marginalizing each Gaussian `bphi_z` prior) before choosing the official implementation.
+- **Scenario A: bfnl baseline** runs `mode="bfnl"` to constrain one product amplitude `B_i = b_{\phi,i} fnl_loc` per independent tracer/redshift bin. In code this parameter is `bfnl_z`. Scenario A has no `bphi_i` prior and no universal sampled `fnl_loc`.
+- **Scenario B: HOD-informed Gaussian bphi prior** targets one universal `fnl_loc` with one Gaussian prior `pi_i(beta_i) = Normal(beta_i; mu_bphi_i, sigma_bphi_i^2)` for each `bphi_i`. Validate both B-direct (`mode="bphi"` sampling of `fnl_loc` and each `bphi_i`) and B-marginal (custom likelihood marginalizing each Gaussian `bphi_i` prior) before choosing the official implementation.
 - **Scenario C: fixed-p universality** fixes `bphi_i = 2 delta_c (b1_i - p_i)` with tracer/sample-specific fixed `p_i` values and samples one universal `fnl_loc`.
-- Redshift-bin `fnl_loc` likelihood curves are multiplied across bins, and the common `fnl_loc` prior is applied exactly once.
+- B-marginal forms `L_i^marg(fnl_loc) = integral d beta_i L_i(B_i = fnl_loc beta_i) pi_i(beta_i)`, multiplies these bin likelihood curves, and applies the common `fnl_loc` prior exactly once.
+- If both `L_i(B_i)` and `pi_i(beta_i)` are Gaussian, use the analytic expression in `paper/main.tex` directly from `Bhat_i`, `sigma_B_i`, `mu_bphi_i`, and `sigma_bphi_i`; Gauss-Hermite quadrature is not needed in this Gaussian-Gaussian limit.
+- If the Gaussian `bphi_i` prior is kept but `L_i(B_i)` is numerical, Gauss-Hermite quadrature is the numerical implementation of the same marginalization integral.
 - `grid` mode is deterministic quadrature for checking the transformation math without sampler noise.
 - `mcmc` mode compares real desilike pipeline chains only.
-- Non-Gaussian `bphi_z` priors are represented by weighted samples or tabulated log-density inputs.
+- Non-Gaussian `bphi_i` priors are represented by weighted samples or tabulated log-density inputs; do not use Gauss-Hermite weights for non-Gaussian priors.
 - The production PNG data vector is the joint `(ell=0, ell=2)` galaxy power-spectrum multipole vector with the matching Gaussian `thecov` covariance.
 - AbacusHOD LRG `want_rsd=True` catalogs are already in redshift space; downstream code must not apply a second RSD shift.
 
@@ -1091,17 +1107,17 @@ python python_scripts/validate_png_fnl_assumptions.py grid --output /tmp/png_fnl
 
 - [ ] **Step 3: Update project state**
 
-Update `docs/PROJECT_STATE.md` so its assumptions/scope section no longer says the main PNG pipeline is monopole-only. It must say the target implementation jointly fits redshift-space monopole and quadrupole, and that the Gaussian covariance is provided by `thecov`.
+Update `docs/PROJECT_STATE.md` so its assumptions/scope section no longer says the main PNG pipeline is monopole-only. It must say the target implementation jointly fits redshift-space monopole and quadrupole, that the Gaussian covariance is provided by `thecov`, and that the formalism follows `paper/main.tex`: `B_i = b_{\phi,i} fnl_loc`, Gaussian HOD priors use `mu_bphi_i` and `sigma_bphi_i`, the Gaussian-Gaussian marginal likelihood is analytic, Gauss-Hermite is only for a Gaussian `bphi_i` prior with numerical `L_i(B_i)`, and non-Gaussian `bphi_i` priors use their own grid/sample weights.
 
 - [ ] **Step 4: Run documentation grep checks**
 
 Run:
 
 ```bash
-rg -n "Scenario A|Scenario B|Scenario C|ell=0|ell=2|thecov|want_rsd|grid mode|mcmc mode|weighted samples|tabulated log-density" README.md docs/PROJECT_STATE.md docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md python_scripts/README.md
+rg -n "Scenario A|Scenario B|Scenario C|ell=0|ell=2|thecov|want_rsd|B_i|mu_bphi_i|sigma_bphi_i|Gaussian-Gaussian|Gauss-Hermite|grid mode|mcmc mode|weighted samples|tabulated log-density" README.md CONTEXT.md docs/PROJECT_STATE.md docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md python_scripts/README.md
 ```
 
-Expected: output contains all listed scope phrases.
+Expected: output contains all listed scope and formalism phrases.
 
 - [ ] **Step 5: Commit**
 
@@ -1122,10 +1138,13 @@ Before claiming the plan is complete, verify:
 
 - `grid` mode never invokes a sampler.
 - `mcmc` mode does not generate synthetic chains.
-- Scenario A has no universal sampled `fnl_loc`; compare it directly only at the individual-bin `bfnl_z` level unless explicitly post-processing with an external `bphi_z` prior.
+- Scenario A has no universal sampled `fnl_loc`; compare it directly only at the individual-bin `B_i`/`bfnl_z` level unless explicitly post-processing with an external `bphi_i` prior.
+- `B_i`, `b_{\phi,i}`, `beta_i`, `L_i(B_i)`, `mu_bphi_i`, and `sigma_bphi_i` are mapped consistently to code-facing names.
+- Gaussian-Gaussian marginalization is described as analytic, with no Gauss-Hermite quadrature required.
+- Gauss-Hermite quadrature is described only for Gaussian `bphi_i` priors when `L_i(B_i)` is numerical.
 - B-marginal and any Scenario A post-processing utility never compute an unweighted `bfnl / bphi` sample ratio.
 - The `fnl_loc` prior is applied once after multiplying independent redshift-bin likelihood curves.
-- Both non-Gaussian `bphi_z` prior representations are covered by tests.
+- Both non-Gaussian `bphi_i` prior representations are covered by tests.
 - The primary Scenario B/C comparison metric is the one-dimensional marginalized `fnl_loc` posterior.
 - The production PNG likelihood uses joint `(ell=0, ell=2)` galaxy power-spectrum multipoles and the matching `thecov` Gaussian covariance.
 - AbacusHOD LRG redshift-space catalogs are not RSD-shifted a second time downstream.

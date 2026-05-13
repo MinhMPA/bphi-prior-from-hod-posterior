@@ -1,17 +1,17 @@
 # Project State
 
-Last updated: 2026-05-13
+Last updated: 2026-05-14
 Updated by: Codex agent
 Project: Data-driven b_phi priors for local PNG
 Paper target: PRD-style working draft; final venue not fixed
 
 ## 1. One-paragraph project summary
 
-This project develops data-driven priors on the local primordial non-Gaussianity response parameter `b_phi` for DESI-like galaxy samples. The method propagates small-scale HOD constraints into `b_phi` using AbacusSummit HOD mocks, separate-universe number-count responses, and validation against AbacusSummitPNG mocks with nonzero `f_NL`. The current paper-level conclusion is preliminary: the analysis is organized around the fact that the large-scale power spectrum constrains `b_phi * f_NL` more directly than `f_NL` alone, so a defensible `f_NL` constraint requires either a universality assumption or an external HOD-informed `b_phi` prior.
+This project develops data-driven priors on the local primordial non-Gaussianity response parameter `b_phi` for DESI-like galaxy samples. The method propagates small-scale HOD constraints into `b_phi` using AbacusSummit HOD mocks, separate-universe number-count responses, and validation against AbacusSummitPNG mocks with nonzero `f_NL`. The current paper-level conclusion is preliminary: the analysis is organized around the fact that the large-scale power spectrum constrains the product amplitude `B_i = b_{\phi,i} f_NL` more directly than `f_NL` alone, so a defensible `f_NL` constraint requires either a universality assumption or an external HOD-informed `b_phi` prior.
 
 ## 2. Current core claim
 
-We show that local-PNG power-spectrum fits constrain the redshift-dependent amplitude `bfnl_z = b_phi,z * f_NL^loc`, and that HOD-informed `b_phi` priors provide a more transparent route from this measured amplitude to `f_NL^loc` than an unconstrained `b_phi` fit or a purely universality-based assumption, using DESI-like LRG HOD mocks built from AbacusSummit and AbacusSummitPNG simulations.
+We show that local-PNG power-spectrum fits constrain the bin-level product amplitude `B_i = b_{\phi,i} f_NL^loc` (`bfnl_z` in the code), and that HOD-informed Gaussian `b_phi` priors provide a more transparent route from this measured amplitude to `f_NL^loc` than an unconstrained `b_phi` fit or a purely universality-based assumption, using DESI-like LRG HOD mocks built from AbacusSummit and AbacusSummitPNG simulations.
 
 Status: preliminary. The claim is well supported as the intended narrative and workflow, but final quantitative constraints are not present in the tracked repository.
 
@@ -22,15 +22,16 @@ Supporting paths: `paper/main.tex`, `docs/superpowers/plans/implementation/fnl_s
 - Problem: local PNG induces a scale-dependent galaxy-bias contribution proportional to `f_NL * b_phi`, making `b_phi` uncertainty a limiting systematic for galaxy-survey `f_NL` inference. Supporting paths: `paper/main.tex`
 - Existing insufficiency: the universality relation `b_phi = 2 delta_c (b_1 - 1)` is only appropriate for idealized mass-selected tracers and is known to fail for realistic galaxy selections. Supporting paths: `paper/main.tex`, `paper/references.bib`
 - New ingredient: use DESI One-Percent/HOD-constrained galaxy-halo connection models to build posterior predictive `b_phi` priors and test them with SU and PNG Abacus workflows. Supporting paths: `paper/main.tex`, `python_scripts/HOD_bphi.py`, `python_scripts/bphi_prior_pipeline.py`
-- Interpretation improvement: report `bfnl_z` when no `b_phi` assumption is used; only convert to `f_NL^loc` under an explicit `b_phi` relation or prior. Supporting paths: `docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md`
+- Interpretation improvement: report `B_i`/`bfnl_z` when no `b_phi` assumption is used; only convert to `f_NL^loc` under an explicit `b_phi` relation or prior. Supporting paths: `paper/main.tex`, `docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md`
 
 ## 4. Current results snapshot
 
 | Result | Status | Location | Notes |
 |---|---|---|---|
-| Power-spectrum data should be interpreted as constraining `bfnl_z = b_phi,z * f_NL^loc` | robust conceptual decision | `docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md` | Use `bfnl_z` as the common diagnostic across prior assumptions. |
-| No free-`b_phi` assumption gives no well-identified `f_NL^loc` posterior | robust conceptual decision | `docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md` | Paper should report `bfnl_z` rather than a prior-volume-driven `f_NL` posterior in this case. |
+| Power-spectrum data should be interpreted as constraining `B_i = b_{\phi,i} f_NL^loc` (`bfnl_z` in code) | robust conceptual decision | `paper/main.tex`, `docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md` | Use `B_i` in paper formalism and `bfnl_z` as the code-facing diagnostic across prior assumptions. |
+| No free-`b_phi` assumption gives no well-identified `f_NL^loc` posterior | robust conceptual decision | `paper/main.tex`, `docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md` | Paper should report `B_i`/`bfnl_z` rather than a prior-volume-driven `f_NL` posterior in this case. |
 | Combined `bfnl` mode plus HOD `b_phi` prior is implemented | preliminary | `python_scripts/bphi_prior_pipeline.py`, `python_scripts/README.md` | Uses a custom likelihood that marginalizes over one common `f_NL`; desilike `bfnl` workflow still needs follow-up validation. |
+| Marginal-likelihood notation is fixed in the draft | current formalism | `paper/main.tex` | `L_i(B_i)` is the product-amplitude likelihood. The marginalized likelihood is `L_i^marg(f_NL) = integral d beta_i L_i(B_i=f_NL beta_i) pi_i(beta_i)`. Gaussian HOD priors use `mu_bphi_i` and `sigma_bphi_i`. |
 | LRG `z=1.1` `b_phi` prior center/width updated to `N(1.99211960, 1.2898^2)` | preliminary | `python_scripts/README.md` | Tracked repo does not include the referenced final stats file, so treat this as workflow state rather than final result. |
 | HOD-side real-space `b1` computation path is implemented | preliminary | `python_scripts/HOD_utils.py`, `python_scripts/HOD_one_lhc.py`, `python_scripts/HOD_bphi.py`, `python_scripts/README.md` | Intended for truth markers and diagnostics; production rerun remains pending. |
 | Target PNG data vector is joint redshift-space `(ell=0, ell=2)` galaxy power-spectrum multipoles | scope decision | `README.md`, `docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md`, `python_scripts/bphi_prior_pipeline.py` | Implementation must upgrade any monopole-only fit path to jointly fit monopole and quadrupole with the matching `thecov` covariance. |
@@ -42,7 +43,7 @@ Supporting paths: `paper/main.tex`, `docs/superpowers/plans/implementation/fnl_s
 | Figure/Table | Purpose | Source script/notebook | Status | Needed changes |
 |---|---|---|---|---|
 | Fig. 1 | Pipeline overview: HOD posterior to SU/PNG `b_phi` calibration to `f_NL` forecast | `paper/main.tex` | not created | Draft schematic and align notation with analysis scripts. |
-| Fig. 2 | Compare `bfnl_z` constraints and `f_NL^loc` posteriors under universality, HOD prior, and no-`b_phi` assumptions | `python_scripts/bphi_prior_pipeline.py`, `docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md` | preliminary tooling | Rerun final chains and decide whether `bfnl` mode is primary. |
+| Fig. 2 | Compare `B_i`/`bfnl_z` constraints and `f_NL^loc` posteriors under universality, HOD prior, and no-`b_phi` assumptions | `python_scripts/bphi_prior_pipeline.py`, `docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md` | preliminary tooling | Rerun final chains and decide whether `bfnl` mode is primary. |
 | Fig. 3 | Triangle plots with/without HOD `b_phi` prior, including ML/MAP and truth overlays | `python_scripts/bphi_prior_pipeline.py` | current tooling | Regenerate after final bphi stats and final chain settings. |
 | Fig. 4 | P(k) and covariance variance diagnostics | `python_scripts/bphi_prior_plot_pk.py` | diagnostic tooling | Decide whether this belongs in paper or appendix. |
 | Fig. 5 | PNG real-space bias k-range diagnostic | `python_scripts/test_png_bias_krange.py` | diagnostic tooling | Run for final redshifts/cosmologies; summarize chosen `b1` window. |
@@ -54,8 +55,8 @@ Supporting paths: `paper/main.tex`, `docs/superpowers/plans/implementation/fnl_s
 
 | Date | Decision | Rationale | Alternatives considered | Consequence |
 |---|---|---|---|---|
-| 2026-05-09 | Treat `bfnl_z = b_phi,z * f_NL^loc` as the common diagnostic. | It is the amplitude directly constrained by the large-scale P(k). | Direct `f_NL`, direct `b_phi`, fixed universality only. | Paper narrative should separate measurement of `bfnl_z` from interpretation as `f_NL`. |
-| 2026-05-09 | Present no-`b_phi` runs as `bfnl_z` constraints, not as physical `f_NL` constraints. | Without a `b_phi` prior or relation, `f_NL` is not identifiable. | Show broad `f_NL` posterior from implicit priors. | Avoids prior-volume artifacts in the main claim. |
+| 2026-05-09 | Treat `B_i = b_{\phi,i} f_NL^loc` (`bfnl_z` in code) as the common diagnostic. | It is the amplitude directly constrained by the large-scale P(k). | Direct `f_NL`, direct `b_phi`, fixed universality only. | Paper narrative should separate measurement of `B_i` from interpretation as `f_NL`. |
+| 2026-05-09 | Present no-`b_phi` runs as `B_i`/`bfnl_z` constraints, not as physical `f_NL` constraints. | Without a `b_phi` prior or relation, `f_NL` is not identifiable. | Show broad `f_NL` posterior from implicit priors. | Avoids prior-volume artifacts in the main claim. |
 | 2026-05-09 | Use fixed `p=1` in `b-p` universality comparisons. | Matches standard universality-style analyses. | Free `p`; HOD prior only. | Universality comparison remains a deterministic relation to `b1`. |
 | 2026-05-09 | Apply HOD `b_phi` information in `bfnl` mode through a combined prior likelihood over one common `f_NL`. | Keeps the data-constrained amplitude separate from the external `b_phi` prior. | Directly sample every `b_phi,z` with `f_NL`. | Needs validation near `f_NL = 0` and against direct `b_phi` sampling. |
 | 2026-05-09 | Use the first LHC `b_phi` entry as the central/reference `b_phi` value in stats loading. | Current workflow treats first entry as the default/reference HOD. | Mean over all LHC `b_phi` values. | Must document exactly what "central" means in paper tables. |
@@ -71,8 +72,9 @@ Supporting paths: `paper/main.tex`, `docs/superpowers/plans/implementation/fnl_s
 - Survey geometry: current covariance and mock measurements assume a periodic box with `BOXSIZE = 2000.0`; real survey window effects are outside the tracked current pipeline. Supporting paths: `python_scripts/bphi_prior_pipeline.py`, `python_scripts/bphi_prior_plot_pk.py`
 - Bias model: fits vary `b1`, `sn0`, and PNG response parameters depending on mode; `sigmas` is fixed to `0.0`; `b-p` mode fixes `p=1`. Supporting paths: `python_scripts/bphi_prior_pipeline.py`
 - RSD treatment: target PNG P(k) fitting uses redshift-space monopole and quadrupole. AbacusHOD LRG catalogs produced with `want_rsd: True` already have redshift-space positions and must not be shifted again downstream. LRG centrals are placed at halo centers but velocities include central velocity bias/scatter; LRG satellites use particle-subsample placement in the primary `use_particles: True` path, with 1-halo velocity contribution controlled by `alpha_s`. Secondary-redshift fallback uses NFW satellite placement with distinct velocity-bias behavior. Real-space P(k) remains the diagnostic path for `b1` estimates. Supporting paths: `README.md`, `python_scripts/HOD_utils.py`, `python_scripts/HOD_one_lhc.py`, `HOD_config/*.yaml`, `python_scripts/bphi_prior_pipeline.py`
-- Priors: current defaults are `|b_phi| < 10`, `|f_NL^loc| < 300`, and `|bfnl_loc| < 3000`; HOD-informed `b_phi` priors are Gaussian when available. Supporting paths: `python_scripts/bphi_prior_pipeline.py`
-- Likelihood approximation: `bfnl` plus `b_phi` prior mode marginalizes over a grid of common `f_NL` values with default `BPHI_BFNL_PRIOR_NGRID = 4096`. Supporting paths: `python_scripts/bphi_prior_pipeline.py`
+- Priors: current defaults are `|b_phi| < 10`, `|f_NL^loc| < 300`, and `|bfnl_loc| < 3000`; HOD-informed `b_phi` priors are Gaussian when available, written in the draft as `pi_i(beta_i) = Normal(beta_i; mu_bphi_i, sigma_bphi_i^2)`. Supporting paths: `paper/main.tex`, `python_scripts/bphi_prior_pipeline.py`
+- Marginal likelihood: the draft defines `L_i^marg(f_NL) = integral d beta_i L_i(B_i=f_NL beta_i) pi_i(beta_i)` and applies the common `f_NL` prior once after multiplying bin likelihood curves. In the Gaussian-Gaussian limit, evaluate the analytic expression directly from `Bhat_i`, `sigma_B_i`, `mu_bphi_i`, and `sigma_bphi_i`; no Gauss-Hermite quadrature is needed. Gauss-Hermite applies only for a Gaussian `b_phi` prior with numerical `L_i(B_i)`. Non-Gaussian `b_phi` priors use their own tabulated-grid or weighted-sample integration weights. Supporting paths: `paper/main.tex`, `docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md`
+- Likelihood approximation: `bfnl` plus `b_phi` prior mode marginalizes over a grid of common `f_NL` values with default `BPHI_BFNL_PRIOR_NGRID = 4096`; this is a validation/implementation strategy for the marginal integral, not a replacement for the analytic Gaussian-Gaussian expression when that approximation is adopted. Supporting paths: `python_scripts/bphi_prior_pipeline.py`, `paper/main.tex`
 
 ## 8. Known limitations
 
@@ -115,7 +117,7 @@ Supporting paths: `paper/main.tex`, `docs/superpowers/plans/implementation/fnl_s
 
 - [ ] Create pipeline overview figure.
 - [ ] Regenerate triangle plots with final bphi stats and final chain settings.
-- [ ] Make final `bfnl_z` and `f_NL^loc` comparison figure.
+- [ ] Make final `B_i`/`bfnl_z` and `f_NL^loc` comparison figure.
 - [ ] Generate final `b_phi` prior table/plot across redshift.
 - [ ] Decide whether P(k), covariance, and k-range diagnostics belong in appendix.
 
@@ -134,7 +136,7 @@ Current proposed story:
 
 1. Problem: local PNG produces a large-scale `k^-2` bias signal, but galaxy-survey inference is limited by uncertainty in `b_phi`.
 2. Method: build DESI-like HOD mocks on AbacusSummit, estimate `b_phi` from SU number-count response, and validate response interpretation with PNG simulations.
-3. Main result: the power spectrum measures `bfnl_z`; HOD-informed `b_phi` priors translate that amplitude into `f_NL^loc` more transparently than unconstrained `b_phi` fits.
+3. Main result: the power spectrum measures `B_i` (`bfnl_z` in code); HOD-informed `b_phi` priors translate that amplitude into `f_NL^loc` more transparently than unconstrained `b_phi` fits.
 4. Why it matters: survey `f_NL` constraints need explicit, sample-specific `b_phi` information rather than relying only on the universality relation.
 5. Caveats: final quantitative claims depend on HOD posterior coverage, assembly bias, covariance approximations, external HPC products, and validation of the `bfnl` implementation.
 6. Future direction: extend to additional tracers, survey-window likelihoods, multi-tracer analyses, and more complete galaxy-formation systematics.
@@ -165,6 +167,6 @@ Current proposed story:
 ### 2026-05-09
 
 - Added initial project-state document from repository scan.
-- Recorded the current paper narrative around `bfnl_z = b_phi,z * f_NL^loc`.
+- Recorded the current paper narrative around `B_i = b_{\phi,i} f_NL^loc` (`bfnl_z` in code).
 - Marked quantitative `b_phi` priors, `f_NL` constraints, and final paper figures as preliminary or missing where tracked artifacts are absent.
 - Added open questions for `bfnl` validation, final bphi prior tables, assembly-bias robustness, and paper methods completion.
