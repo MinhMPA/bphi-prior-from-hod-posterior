@@ -17,6 +17,8 @@ Status: preliminary. The claim is well supported as the intended narrative and w
 
 Supporting paths: `paper/main.tex`, `docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md`, `python_scripts/bphi_prior_pipeline.py`, `python_scripts/README.md`
 
+Current deliverable framing: `docs/TO_DO.md` tracks paper-blocking work. `docs/TO_CONSIDER.md` tracks strategic package and DESI/cosmodesi adoption ideas that should not block the paper.
+
 ## 3. Scientific motivation
 
 - Problem: local PNG induces a scale-dependent galaxy-bias contribution proportional to `f_NL * b_phi`, making `b_phi` uncertainty a limiting systematic for galaxy-survey `f_NL` inference. Supporting paths: `paper/main.tex`
@@ -37,6 +39,8 @@ Supporting paths: `paper/main.tex`, `docs/superpowers/plans/implementation/fnl_s
 | Target PNG data vector is joint redshift-space `(ell=0, ell=2)` galaxy power-spectrum multipoles | scope decision | `README.md`, `docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md`, `python_scripts/bphi_prior_pipeline.py` | Implementation must upgrade any monopole-only fit path to jointly fit monopole and quadrupole with the matching `thecov` covariance. |
 | AbacusHOD secondary-redshift handling for `z=0.950` now uses NFW satellite placement fallback | preliminary implementation result | `python_scripts/HOD_utils.py`, `python_scripts/HOD_one_lhc.sh`, `python_scripts/README.md` | Lightweight validation noted; full `srun` production rerun remains open. |
 | Final `f_NL` constraints and paper-ready `b_phi` prior tables | missing / not yet in repo | `python_scripts/bphi_prior_pipeline.py`, `paper/main.tex` | No tracked final chains, stats tables, or figure PDFs found. |
+| Paper deliverable checklist | active planning artifact | `docs/TO_DO.md` | Focuses on the minimum products needed for a credible B/B+ paper: validated workflow, `b_phi(z,b_1)` trends, figures/tables, and draft completion. |
+| Strategic package/adoption checklist | active planning artifact | `docs/TO_CONSIDER.md` | Tracks optional work toward a reusable `desilike`/`thecov` wrapper and possible DESI/cosmodesi adoption. Not a paper blocker. |
 
 ## 5. Figures and tables for the paper
 
@@ -79,6 +83,7 @@ Supporting paths: `paper/main.tex`, `docs/superpowers/plans/implementation/fnl_s
 ## 8. Known limitations
 
 - Final quantitative results are not yet tracked: no final `b_phi` stats table, final chain files, final stats exports, or paper-ready figures are present in the repository. Supporting paths: `python_scripts/README.md`, `paper/main.tex`
+- The exact HOD posterior products and released `b_phi` priors may be debated by collaborators or future analyses; the paper should not rely on their becoming community-default priors. Supporting paths: `docs/TO_DO.md`, `docs/TO_CONSIDER.md`
 - The paper draft has placeholders in the simulation/mocks sections (`XX`, `YY`, and unfinished statistic descriptions). Supporting paths: `paper/main.tex`
 - The current workflow relies on external NERSC paths and data products under `/pscratch`, `/global`, or local desilike/HODDIES installations. Supporting paths: `python_scripts/HOD_one_lhc.py`, `python_scripts/bphi_prior_pipeline.sh`, `HOD_config/*.yaml`
 - The `bfnl` plus HOD-prior implementation needs explicit validation against fixed-p closure, limiting behavior, and direct `b_phi` sampling. Supporting paths: `docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md`, `python_scripts/README.md`
@@ -101,6 +106,8 @@ Supporting paths: `paper/main.tex`, `docs/superpowers/plans/implementation/fnl_s
 
 ## 10. To-do list before paper submission
 
+The authoritative paper checklist is `docs/TO_DO.md`. The list below is a compact mirror of the main categories.
+
 ### Analysis
 
 - [ ] Produce final tracked or archived `b_phi` prior table for all paper redshifts.
@@ -112,6 +119,7 @@ Supporting paths: `paper/main.tex`, `docs/superpowers/plans/implementation/fnl_s
 - [ ] Upgrade and validate the PNG fit path for the joint `(ell=0, ell=2)` data vector.
 - [ ] Audit HOD mock RSD handling for LRG and ELG paths, including double-shift checks.
 - [ ] Export final chain/profile stats for all main comparisons.
+- [ ] Produce preliminary `b_phi(z,b_1)` trends for DESI-like LRG, QSO, and ELG samples where the HOD/RSD inputs are sufficiently audited.
 
 ### Figures
 
@@ -129,6 +137,8 @@ Supporting paths: `paper/main.tex`, `docs/superpowers/plans/implementation/fnl_s
 - [ ] Write measurement and validation sections.
 - [ ] Add limitations section covering universality, assembly bias, covariance, and external-data dependence.
 - [ ] Fix notation and possible typo in the universality-relation equation in `paper/main.tex`.
+- [ ] Frame the released priors as model-dependent products, not definitive community defaults.
+- [ ] State that a reusable `desilike`/`thecov` marginal-likelihood wrapper is a strategic extension, not a requirement for paper submission.
 
 ## 11. Paper narrative
 
@@ -136,10 +146,10 @@ Current proposed story:
 
 1. Problem: local PNG produces a large-scale `k^-2` bias signal, but galaxy-survey inference is limited by uncertainty in `b_phi`.
 2. Method: build DESI-like HOD mocks on AbacusSummit, estimate `b_phi` from SU number-count response, and validate response interpretation with PNG simulations.
-3. Main result: the power spectrum measures `B_i` (`bfnl_z` in code); HOD-informed `b_phi` priors translate that amplitude into `f_NL^loc` more transparently than unconstrained `b_phi` fits.
+3. Main result: the power spectrum measures `B_i` (`bfnl_z` in code); HOD-informed `b_phi` priors translate that amplitude into `f_NL^loc` more transparently than unconstrained `b_phi` fits, and the HOD workflow gives preliminary DESI-like `b_phi(z,b_1)` trends.
 4. Why it matters: survey `f_NL` constraints need explicit, sample-specific `b_phi` information rather than relying only on the universality relation.
 5. Caveats: final quantitative claims depend on HOD posterior coverage, assembly bias, covariance approximations, external HPC products, and validation of the `bfnl` implementation.
-6. Future direction: extend to additional tracers, survey-window likelihoods, multi-tracer analyses, and more complete galaxy-formation systematics.
+6. Future direction: package the marginal-likelihood machinery as a clean `desilike`/`thecov`-compatible wrapper, extend to additional tracers, survey-window likelihoods, multi-tracer analyses, and more complete galaxy-formation systematics.
 
 ## 12. Relevant files
 
@@ -161,6 +171,8 @@ Current proposed story:
 | FNL interpretation plan | `docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md` |
 | FNL validation plan | `docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md` |
 | Exploratory b1 notebook | `jupyter_notebooks/Fit_b1_to_AbacusSUmmit_HOD_mocks.ipynb` |
+| Paper deliverable checklist | `docs/TO_DO.md` |
+| Strategic package/adoption checklist | `docs/TO_CONSIDER.md` |
 
 ## 13. Changelog
 

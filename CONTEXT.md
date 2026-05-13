@@ -80,6 +80,14 @@ _Avoid_: Applying a second downstream RSD shift without proving the input catalo
 The rule used to place satellite galaxies in halos. For AbacusHOD LRG primary `use_particles=True` catalogs, satellites follow particle/subsample positions and include 1-halo velocity contribution; secondary-redshift fallback uses NFW placement.
 _Avoid_: Saying all HOD galaxies sit at halo centers.
 
+**Paper deliverable**:
+The minimum scientific product needed for this project to stand as a paper: a validated HOD-to-`b_phi` prior workflow, clear `B_i` to `fnl_loc` marginalization, and preliminary DESI-like `b_phi(z,b_1)` trends for LRG/QSO/ELG where the inputs are reliable.
+_Avoid_: Making paper success depend on the community adopting the exact released HOD priors.
+
+**Strategic package deliverable**:
+A reusable wrapper around the `desilike`/`thecov` workflow that lets users turn product-amplitude likelihoods `L_i(B_i)` plus external `bphi_i` priors into a common `fnl_loc` posterior.
+_Avoid_: Coupling this wrapper to this repo's specific HOD posterior products.
+
 ## Relationships
 
 - The power spectrum constrains **B_i** (`bfnl_z` in code) directly, not **fnl_loc** alone.
@@ -101,6 +109,10 @@ _Avoid_: Saying all HOD galaxies sit at halo centers.
 - AbacusHOD LRG centrals are placed at halo centers, but their velocities can include central velocity bias/scatter.
 - AbacusHOD LRG satellites are not generally halo-center objects; primary catalogs use particle/subsample placement, while secondary fallback catalogs use NFW placement.
 - A **Redshift-space HOD catalog** must not be shifted to redshift space again downstream.
+- The near-term **Paper deliverable** is tracked in `docs/TO_DO.md`.
+- The non-blocking **Strategic package deliverable** is tracked in `docs/TO_CONSIDER.md`.
+- The exact HOD posterior choice is scientifically debatable; therefore, the reusable inference wrapper may have more long-term adoption value than any single released prior table.
+- Preliminary redshift-evolution and `b_1`-dependence trends of `b_phi` for DESI-like LRG, QSO, and ELG samples are still valuable even if users later substitute different HOD priors.
 
 ## Example Dialogue
 
