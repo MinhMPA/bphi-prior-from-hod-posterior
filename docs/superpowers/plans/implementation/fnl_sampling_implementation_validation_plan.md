@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. This plan is written for AI agents: follow the constraints exactly, keep edits scoped to the listed files, and do not reinterpret statistical terms.
 
-**Goal:** Implement validation tooling for two matched `fnl_loc` inference paths: Approach A direct `bphi` sampling and Approach B `mode="bfnl"` sampling plus marginalization over external `bphi` priors.
+**Goal:** Implement and validate the benchmark scenarios used for the paper-level `fnl_loc` comparison, with explicit scope for the data vector, covariance, and redshift-space HOD mock convention.
 
-**Architecture:** Add a dependency-light NumPy validation module that supports deterministic `grid` validation and real-pipeline `mcmc` validation. `grid` mode proves the probability transformations without sampler noise. `mcmc` mode consumes only desilike pipeline chains and compares the sampled direct-`bphi` `fnl_loc` marginal against the post-processed `mode="bfnl"` `fnl_loc` marginal.
+**Architecture:** Add validation tooling around the existing desilike-based PNG pipeline. The production data vector is the joint galaxy power-spectrum multipole vector `(P_0, P_2)`, i.e. monopole and quadrupole, using the Gaussian covariance supplied by `thecov` for the same joint vector. Validation has two execution modes: `grid` uses deterministic quadrature to isolate probability transformations, while `mcmc` consumes only real desilike pipeline chains and compares the resulting one-dimensional marginalized `fnl_loc` posteriors.
 
 **Tech Stack:** Python, NumPy, pytest, existing `python_scripts/bphi_prior_pipeline.py` naming conventions, optional desilike chain loading for real-output validation.
 
@@ -12,18 +12,29 @@
 
 ## Human Summary
 
-The power spectrum primarily constrains the redshift-bin product
+The power-spectrum data vector is the joint redshift-space galaxy multipole vector
+
+```text
+d_z = [P_0^g(k), P_2^g(k)]
+```
+
+for each tracer/redshift sample. The likelihood must fit `ell = 0` and `ell = 2` jointly, using the matching Gaussian covariance from `thecov`. Do not treat the quadrupole as a diagnostic-only output once this plan is implemented.
+
+The PNG amplitude constrained most directly by the large-scale data is the redshift-bin product
 
 ```text
 B_z = bfnl_z = bphi_z * fnl_loc
 ```
 
-not `fnl_loc` alone. The validation compares two matched paths for obtaining the one-dimensional marginalized `fnl_loc` posterior:
+not `fnl_loc` alone. The benchmark scenarios are:
 
-- **Approach A:** sample `fnl_loc` and each redshift-bin `bphi_z` directly, with explicit priors on both.
-- **Approach B:** sample each redshift-bin `bfnl_z` amplitude in `mode="bfnl"`, then post-process by marginalizing over the external `bphi_z` prior.
+- **Scenario A, bfnl baseline:** run desilike `mode="bfnl"` and sample one `bfnl_z` amplitude per independent tracer/redshift bin, with no `bphi_z` prior and no universal sampled `fnl_loc`. Scenario A is reported and validated at the individual-bin `bfnl_z` level.
+- **Scenario B, HOD-informed Gaussian bphi prior:** infer one universal `fnl_loc` with one Gaussian HOD prior on each `bphi_z`. Two candidate implementation strategies must be benchmarked before choosing the official Scenario B implementation:
+  - **B-direct:** desilike `mode="bphi"` samples `b1_z`, `bphi_z`, and the universal `fnl_loc` directly.
+  - **B-marginal:** a custom likelihood wrapper samples `b1_z` and universal `fnl_loc` while one-dimensionally marginalizing each Gaussian `bphi_z` prior, e.g. with Gauss-Hermite quadrature.
+- **Scenario C, fixed-p universality:** run the fixed-`p_i` relation `bphi_i = 2 delta_c (b1_i - p_i)`, using tracer/sample-specific fixed `p_i` values for LRG, ELG, and QSO, and infer one universal `fnl_loc`.
 
-Approach B converts each independent redshift-bin `bfnl_z` constraint into an `fnl_loc` likelihood curve,
+Scenario B marginalization and Scenario A post-processing utilities convert each independent redshift-bin `bfnl_z` constraint into an `fnl_loc` likelihood curve,
 
 ```text
 L_z(f) = integral d beta_z L_z(B_z = f beta_z) pi_z(beta_z)
@@ -42,17 +53,30 @@ Bhat_z | f ~ Normal(f * mu_beta,z,
                     sqrt(sigma_B,z^2 + f^2 sigma_beta,z^2))
 ```
 
-For non-Gaussian `bphi_z` priors, the same integral must be evaluated numerically from either weighted `bphi_z` samples or a tabulated `bphi_z` log-density. The validation target is the `fnl_loc` marginal only; Approach B is not required to reproduce Approach A's sampled `bphi_z` marginals.
+For non-Gaussian `bphi_z` priors, the same integral must be evaluated numerically from either weighted `bphi_z` samples or a tabulated `bphi_z` log-density. The validation target is the `fnl_loc` marginal only; B-marginal is not required to reproduce B-direct's sampled `bphi_z` marginals.
+
+The HOD mock catalog convention must be explicit in the implementation and validation:
+
+- For AbacusHOD LRG catalogs, centrals are placed at the halo-center position, but their velocities include central velocity bias/scatter through `vel + alpha_c * vdev`; the current LRG configs use `alpha_c = 0.33`.
+- AbacusHOD LRG satellites are not generally at halo centers. In the primary `use_particles: True` path, satellite positions follow particle/subsample positions and velocities include a 1-halo contribution through `hvel + alpha_s * (pvel - hvel)`; the current LRG configs use `alpha_s = 0.8`.
+- For AbacusHOD secondary-redshift fallback catalogs, satellites use the NFW placement path, which has different velocity-bias behavior and must be documented separately from the particle-subsample path.
+- The default AbacusHOD LRG config has `want_rsd: True`, so the returned LRG catalog positions are already redshift-space positions. Downstream power-spectrum code must not apply a second RSD shift to those catalogs.
+- ELG/HODDIES catalogs use a separate convention with satellite-velocity settings such as `vel_sat`, `f_sigv`, and `vsmear`; before using ELG as a benchmark scenario, the implementation must audit whether HODDIES already applied RSD to avoid double shifting.
 
 ## Non-Negotiable Constraints for Implementing Agents
 
 - Use `B_z`, `bfnl_z`, and `bfnl_loc` for the data-constrained product `bphi_z * fnl_loc`.
-- Approach A means direct joint inference over `fnl_loc` and one `bphi_z` nuisance parameter per redshift bin.
-- Approach B means `mode="bfnl"` inference over one `bfnl_z` amplitude per redshift bin, followed by marginalization over external `bphi_z` priors.
-- Approach B must not use unweighted sample-by-sample ratios such as `fnl = bfnl / bphi`.
+- Do not use "Approach A/B" as benchmark scenario names. Use Scenario A/B/C for science cases and B-direct/B-marginal for Scenario B implementation strategies.
+- Scenario A means `mode="bfnl"` inference over one `bfnl_z` amplitude per independent tracer/redshift bin, with no `bphi_z` prior and no universal sampled `fnl_loc`.
+- B-direct means direct joint inference over one universal `fnl_loc` and one `bphi_z` nuisance parameter per tracer/redshift bin.
+- B-marginal means inference over one universal `fnl_loc` while marginalizing each external `bphi_z` prior inside the likelihood.
+- Scenario C means fixed-p inference with `bphi_i = 2 delta_c (b1_i - p_i)`, where `p_i` is fixed per tracer/sample.
+- B-marginal and any Scenario A post-processing utility must not use unweighted sample-by-sample ratios such as `fnl = bfnl / bphi`.
 - Redshift bins are independent in this plan.
 - Combine redshift bins as likelihood curves, then apply the common `fnl_loc` prior exactly once.
-- Validation focuses on the one-dimensional marginalized `fnl_loc` posterior. Do not require Approach B to reproduce direct-sampling `bphi_z` marginals.
+- Validation focuses on the one-dimensional marginalized `fnl_loc` posterior for Scenarios B and C, and on individual-bin `bfnl_z` agreement for Scenario A.
+- The production data vector is `(ell=0, ell=2)` galaxy power-spectrum multipoles, fitted jointly with the matching `thecov` Gaussian covariance.
+- For HOD mocks used to build or validate redshift-space clustering, the implementation must record whether catalog positions are already in redshift space and must guard against double RSD shifting.
 - `grid` mode uses deterministic quadrature only. It is not a production sampler.
 - `mcmc` mode loads real desilike pipeline chains only. Do not add synthetic MCMC chain generation.
 - Non-Gaussian `bphi_z` priors must be accepted in both forms:
@@ -63,7 +87,7 @@ For non-Gaussian `bphi_z` priors, the same integral must be evaluated numericall
 ## File Structure
 
 - Create `python_scripts/png_fnl_validation.py`
-  - Pure NumPy functions for stable log operations, grid normalization, Gaussian likelihoods, `bphi` prior representations, Approach A grid integration, Approach B post-processing, posterior comparison metrics, and real-chain histogram conversion.
+  - Pure NumPy functions for stable log operations, grid normalization, Gaussian likelihoods, `bphi` prior representations, B-direct grid integration, B-marginal post-processing, Scenario C fixed-p closure helpers, posterior comparison metrics, and real-chain histogram conversion.
 - Create `tests/test_png_fnl_validation.py`
   - Fast unit tests for deterministic grid validation, non-Gaussian prior integration, prior-counting behavior, and CLI smoke tests.
 - Create `python_scripts/validate_png_fnl_assumptions.py`
@@ -71,7 +95,63 @@ For non-Gaussian `bphi_z` priors, the same integral must be evaluated numericall
   - `grid` runs deterministic synthetic validation cases.
   - `mcmc` loads real desilike pipeline chains from file paths supplied by the user.
 - Modify `python_scripts/README.md`
-  - Document `grid` vs `mcmc`, Approach A vs Approach B, accepted `bphi` prior formats, and expected outputs.
+  - Document `grid` vs `mcmc`, Scenario A/B/C, B-direct vs B-marginal, accepted `bphi` prior formats, the `(ell=0, ell=2)` data vector, RSD/HOD catalog conventions, and expected outputs.
+
+---
+
+### Task 0: Upgrade Production Data Vector and HOD RSD Guardrails
+
+**Files:**
+- Modify: `python_scripts/bphi_prior_pipeline.py`
+- Modify: `python_scripts/HOD_utils.py` only if the audit finds a real double-shift risk
+- Modify or create focused tests only where local test scaffolding already exists
+
+- [ ] **Step 1: Locate all monopole-only assumptions**
+
+Search for `ells=(0,)`, `pk0`, covariance slicing, and observable construction in `python_scripts/bphi_prior_pipeline.py`.
+
+Expected: every production PNG likelihood path that currently hard-codes the monopole is identified before editing.
+
+- [ ] **Step 2: Switch the production PNG fit to the joint multipole vector**
+
+Update the desilike observable/theory construction so the production PNG likelihood fits `ells=(0, 2)` jointly. Keep the covariance source as `thecov`; do not introduce a separate ad hoc quadrupole covariance. The implementation must preserve the ordering expected by desilike and `thecov` for the combined vector.
+
+Expected behavior:
+
+- `ell=0` and `ell=2` are included for every benchmark scenario A/B/C.
+- The likelihood sees one joint data vector per tracer/redshift sample, not two independently normalized fits.
+- Existing block-diagonal redshift-bin combination behavior is preserved unless a test shows the current covariance loader already supplies cross-bin blocks.
+
+- [ ] **Step 3: Add data-vector validation checks**
+
+Add lightweight assertions or tests that fail if the data vector and covariance shapes do not match after enabling `ells=(0, 2)`.
+
+Expected behavior:
+
+- A missing quadrupole column, malformed covariance, or monopole-only covariance fails with a clear error before sampling.
+- The error message names the tracer/redshift sample and the expected multipoles.
+
+- [ ] **Step 4: Audit HOD redshift-space handling**
+
+Verify the LRG and ELG catalog paths separately.
+
+Expected behavior:
+
+- LRG AbacusHOD catalogs generated with `want_rsd=True` are treated as already redshift-space and are not shifted again downstream.
+- LRG real-space diagnostic `b1` computations continue to request or use real-space positions explicitly.
+- ELG/HODDIES code must document whether the input catalog is already RSD shifted. If this cannot be proven from local code/config, leave an explicit runtime guard or TODO that blocks production ELG validation rather than risking a double shift.
+
+- [ ] **Step 5: Document runtime assumptions in output metadata**
+
+Where the pipeline writes validation reports or summary files, include:
+
+- `ells = (0, 2)`
+- covariance source: `thecov`
+- catalog space: `redshift` or `real`
+- RSD source: `AbacusHOD want_rsd`, `local manual shift`, or `not applied`
+- satellite placement path where known: `particle_subsample` or `nfw`
+
+Expected: downstream plots and paper tables can identify whether a result used the production joint data vector and which HOD/RSD convention generated the mock.
 
 ---
 
@@ -350,31 +430,31 @@ Expected: commit succeeds.
 
 ---
 
-### Task 3: Implement grid Mode Approach A vs Approach B Validation
+### Task 3: Implement grid Mode B-direct vs B-marginal Validation
 
 **Files:**
 - Modify: `python_scripts/png_fnl_validation.py`
 - Modify: `tests/test_png_fnl_validation.py`
 
-- [ ] **Step 1: Add failing tests for Approach A and Approach B fnl_loc equivalence**
+- [ ] **Step 1: Add failing tests for B-direct and B-marginal fnl_loc equivalence**
 
 Append to `tests/test_png_fnl_validation.py`:
 
 ```python
 from python_scripts.png_fnl_validation import (
-    approach_a_direct_bphi_grid_logposterior,
-    approach_b_bfnl_grid_logposterior,
+    b_direct_grid_logposterior,
+    b_marginal_grid_logposterior,
     compare_posteriors,
 )
 
 
-def test_grid_approach_a_and_b_match_for_gaussian_bphi_priors():
+def test_grid_b_direct_and_b_marginal_match_for_gaussian_bphi_priors():
     fnl_grid = np.linspace(-300.0, 300.0, 2401)
     beta_grid = np.linspace(-1.0, 7.0, 2001)
     bfnl_obs = np.array([120.0, 80.0])
     bfnl_sigma = np.array([12.0, 16.0])
     priors = [GaussianBphiPrior(3.0, 0.4), GaussianBphiPrior(2.0, 0.3)]
-    direct = approach_a_direct_bphi_grid_logposterior(
+    direct = b_direct_grid_logposterior(
         fnl_grid=fnl_grid,
         beta_grid=beta_grid,
         bfnl_obs=bfnl_obs,
@@ -382,7 +462,7 @@ def test_grid_approach_a_and_b_match_for_gaussian_bphi_priors():
         bphi_priors=priors,
         fnl_limits=(-300.0, 300.0),
     )
-    postprocessed = approach_b_bfnl_grid_logposterior(
+    postprocessed = b_marginal_grid_logposterior(
         fnl_grid=fnl_grid,
         beta_grid=beta_grid,
         bfnl_obs=bfnl_obs,
@@ -395,11 +475,11 @@ def test_grid_approach_a_and_b_match_for_gaussian_bphi_priors():
     assert metrics["mean_abs_pdf_diff"] < 1.0e-12
 
 
-def test_grid_approach_b_applies_common_fnl_prior_once():
+def test_grid_b_marginal_applies_common_fnl_prior_once():
     fnl_grid = np.linspace(-30.0, 30.0, 1201)
     beta_grid = np.linspace(0.2, 4.0, 1201)
     priors = [GaussianBphiPrior(2.0, 0.2), GaussianBphiPrior(2.0, 0.2), GaussianBphiPrior(2.0, 0.2)]
-    logposterior = approach_b_bfnl_grid_logposterior(
+    logposterior = b_marginal_grid_logposterior(
         fnl_grid=fnl_grid,
         beta_grid=beta_grid,
         bfnl_obs=np.array([20.0, 22.0, 18.0]),
@@ -417,12 +497,12 @@ def test_grid_approach_b_applies_common_fnl_prior_once():
 Run:
 
 ```bash
-pytest tests/test_png_fnl_validation.py::test_grid_approach_a_and_b_match_for_gaussian_bphi_priors tests/test_png_fnl_validation.py::test_grid_approach_b_applies_common_fnl_prior_once -q
+pytest tests/test_png_fnl_validation.py::test_grid_b_direct_and_b_marginal_match_for_gaussian_bphi_priors tests/test_png_fnl_validation.py::test_grid_b_marginal_applies_common_fnl_prior_once -q
 ```
 
 Expected: FAIL with `ImportError` for the new functions.
 
-- [ ] **Step 3: Implement Approach A and Approach B grid functions**
+- [ ] **Step 3: Implement B-direct and B-marginal grid functions**
 
 Append to `python_scripts/png_fnl_validation.py`:
 
@@ -457,7 +537,7 @@ def _per_bin_fnl_loglike_from_grid(fnl_grid, beta_grid, bfnl_obs, bfnl_sigma, bp
     return output
 
 
-def approach_b_bfnl_grid_logposterior(
+def b_marginal_grid_logposterior(
     fnl_grid,
     beta_grid,
     bfnl_obs,
@@ -473,7 +553,7 @@ def approach_b_bfnl_grid_logposterior(
     return np.log(normalize_logpdf_on_grid(fnl_grid, logposterior))
 
 
-def approach_a_direct_bphi_grid_logposterior(
+def b_direct_grid_logposterior(
     fnl_grid,
     beta_grid,
     bfnl_obs,
@@ -481,7 +561,7 @@ def approach_a_direct_bphi_grid_logposterior(
     bphi_priors,
     fnl_limits=(-300.0, 300.0),
 ):
-    return approach_b_bfnl_grid_logposterior(
+    return b_marginal_grid_logposterior(
         fnl_grid=fnl_grid,
         beta_grid=beta_grid,
         bfnl_obs=bfnl_obs,
@@ -509,7 +589,7 @@ def compare_posteriors(grid, logpdf_a, logpdf_b):
 Run:
 
 ```bash
-pytest tests/test_png_fnl_validation.py::test_grid_approach_a_and_b_match_for_gaussian_bphi_priors tests/test_png_fnl_validation.py::test_grid_approach_b_applies_common_fnl_prior_once -q
+pytest tests/test_png_fnl_validation.py::test_grid_b_direct_and_b_marginal_match_for_gaussian_bphi_priors tests/test_png_fnl_validation.py::test_grid_b_marginal_applies_common_fnl_prior_once -q
 ```
 
 Expected: `2 passed`.
@@ -538,7 +618,7 @@ Expected: commit succeeds.
 Append to `tests/test_png_fnl_validation.py`:
 
 ```python
-from python_scripts.png_fnl_validation import approach_b_bfnl_weighted_sample_logposterior
+from python_scripts.png_fnl_validation import b_marginal_weighted_sample_logposterior
 
 
 def test_tabulated_non_gaussian_bphi_prior_runs_in_grid_mode():
@@ -549,7 +629,7 @@ def test_tabulated_non_gaussian_bphi_prior_runs_in_grid_mode():
         gaussian_logpdf(beta_grid, loc=3.0, scale=0.4) + np.log(0.65),
     )
     prior = TabulatedBphiPrior(beta_grid=beta_grid, logpdf=logpdf)
-    logposterior = approach_b_bfnl_grid_logposterior(
+    logposterior = b_marginal_grid_logposterior(
         fnl_grid=fnl_grid,
         beta_grid=beta_grid,
         bfnl_obs=np.array([60.0]),
@@ -567,7 +647,7 @@ def test_weighted_sample_bphi_prior_runs_without_ratio_conversion():
     samples = np.array([1.0, 1.5, 2.0, 3.5, 4.0])
     weights = np.array([0.1, 0.2, 0.4, 0.2, 0.1])
     prior = WeightedSampleBphiPrior(samples=samples, weights=weights)
-    logposterior = approach_b_bfnl_weighted_sample_logposterior(
+    logposterior = b_marginal_weighted_sample_logposterior(
         fnl_grid=fnl_grid,
         bfnl_obs=np.array([40.0]),
         bfnl_sigma=np.array([5.0]),
@@ -588,7 +668,7 @@ Run:
 pytest tests/test_png_fnl_validation.py::test_tabulated_non_gaussian_bphi_prior_runs_in_grid_mode tests/test_png_fnl_validation.py::test_weighted_sample_bphi_prior_runs_without_ratio_conversion -q
 ```
 
-Expected: FAIL with `ImportError` for `approach_b_bfnl_weighted_sample_logposterior`.
+Expected: FAIL with `ImportError` for `b_marginal_weighted_sample_logposterior`.
 
 - [ ] **Step 3: Implement weighted-sample marginalization**
 
@@ -607,7 +687,7 @@ def _per_bin_fnl_loglike_from_weighted_samples(fnl_grid, bfnl_obs, bfnl_sigma, b
     return output
 
 
-def approach_b_bfnl_weighted_sample_logposterior(
+def b_marginal_weighted_sample_logposterior(
     fnl_grid,
     bfnl_obs,
     bfnl_sigma,
@@ -683,7 +763,7 @@ def test_validation_cli_grid_mode_writes_report(tmp_path):
     assert result.returncode == 0
     text = output.read_text(encoding="utf-8")
     assert "Grid validation report" in text
-    assert "approach_a_vs_b_max_abs_cdf_diff" in text
+    assert "b_direct_vs_b_marginal_max_abs_cdf_diff" in text
 ```
 
 - [ ] **Step 2: Run CLI tests to verify they fail**
@@ -713,8 +793,8 @@ import numpy as np
 
 from png_fnl_validation import (
     GaussianBphiPrior,
-    approach_a_direct_bphi_grid_logposterior,
-    approach_b_bfnl_grid_logposterior,
+    b_direct_grid_logposterior,
+    b_marginal_grid_logposterior,
     compare_posteriors,
 )
 
@@ -739,7 +819,7 @@ def run_grid_report():
     bfnl_obs = np.array([120.0, 80.0])
     bfnl_sigma = np.array([12.0, 16.0])
     priors = [GaussianBphiPrior(3.0, 0.4), GaussianBphiPrior(2.0, 0.3)]
-    direct = approach_a_direct_bphi_grid_logposterior(
+    direct = b_direct_grid_logposterior(
         fnl_grid=fnl_grid,
         beta_grid=beta_grid,
         bfnl_obs=bfnl_obs,
@@ -747,7 +827,7 @@ def run_grid_report():
         bphi_priors=priors,
         fnl_limits=(-300.0, 300.0),
     )
-    postprocessed = approach_b_bfnl_grid_logposterior(
+    postprocessed = b_marginal_grid_logposterior(
         fnl_grid=fnl_grid,
         beta_grid=beta_grid,
         bfnl_obs=bfnl_obs,
@@ -760,8 +840,8 @@ def run_grid_report():
         "Grid validation report",
         "mode = grid",
         "purpose = deterministic quadrature without sampler noise",
-        f"approach_a_vs_b_max_abs_cdf_diff = {metrics['max_abs_cdf_diff']:.6e}",
-        f"approach_a_vs_b_mean_abs_pdf_diff = {metrics['mean_abs_pdf_diff']:.6e}",
+        f"b_direct_vs_b_marginal_max_abs_cdf_diff = {metrics['max_abs_cdf_diff']:.6e}",
+        f"b_direct_vs_b_marginal_mean_abs_pdf_diff = {metrics['mean_abs_pdf_diff']:.6e}",
     ]
 
 
@@ -962,27 +1042,45 @@ Expected: commit succeeds.
 
 ---
 
-### Task 7: Document Validation Strategy
+### Task 7: Document Analysis Scope and Validation Strategy
 
 **Files:**
+- Modify: `README.md`
 - Modify: `python_scripts/README.md`
-- Modify: `docs/superpowers/plans/fnl_sampling_implementation_validation_plan.md`
+- Modify: `docs/PROJECT_STATE.md`
+- Modify: `docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md`
 
-- [ ] **Step 1: Append validation strategy notes to python_scripts README**
+- [ ] **Step 1: Document the production data vector and catalog-space convention**
+
+Update the root `README.md` with a short "Analysis Contract" section that states:
+
+- the production PNG data vector is the joint galaxy power-spectrum multipole vector `(ell=0, ell=2)`;
+- `ell=0` and `ell=2` are fit jointly, not as separate diagnostics;
+- the Gaussian covariance for the joint vector is supplied by `thecov`;
+- AbacusHOD LRG catalogs with `want_rsd=True` are already shifted to redshift space by AbacusHOD;
+- LRG centrals are placed at halo centers, but velocities include the configured central velocity-bias/scatter term;
+- LRG satellites use particle-subsample placement for the primary `use_particles: True` path, with 1-halo velocity contribution controlled by `alpha_s`;
+- secondary-redshift AbacusHOD fallback uses NFW satellite placement and must be documented separately;
+- ELG/HODDIES RSD handling must be audited before ELG benchmarks are treated as production validation, to avoid double RSD shifts.
+
+- [ ] **Step 2: Append validation strategy notes to python_scripts README**
 
 Append to `python_scripts/README.md`:
 
 ```markdown
 ## fnl_loc Posterior Validation Strategy
 
-The validation distinguishes two inference paths for the same one-dimensional marginalized `fnl_loc` posterior.
+The validation distinguishes three benchmark scenarios and two candidate implementations for Scenario B.
 
-- **Approach A: direct bphi sampling** samples `fnl_loc` and one `bphi_z` parameter per redshift bin with explicit priors.
-- **Approach B: bfnl sampling plus bphi marginalization** runs `mode="bfnl"` to constrain one `bfnl_z = bphi_z * fnl_loc` amplitude per redshift bin, then marginalizes over the external `bphi_z` prior for each bin.
+- **Scenario A: bfnl baseline** runs `mode="bfnl"` to constrain one `bfnl_z = bphi_z * fnl_loc` amplitude per independent tracer/redshift bin, with no `bphi_z` prior and no universal sampled `fnl_loc`.
+- **Scenario B: HOD-informed Gaussian bphi prior** targets one universal `fnl_loc`. Validate both B-direct (`mode="bphi"` sampling of `fnl_loc` and each `bphi_z`) and B-marginal (custom likelihood marginalizing each Gaussian `bphi_z` prior) before choosing the official implementation.
+- **Scenario C: fixed-p universality** fixes `bphi_i = 2 delta_c (b1_i - p_i)` with tracer/sample-specific fixed `p_i` values and samples one universal `fnl_loc`.
 - Redshift-bin `fnl_loc` likelihood curves are multiplied across bins, and the common `fnl_loc` prior is applied exactly once.
 - `grid` mode is deterministic quadrature for checking the transformation math without sampler noise.
 - `mcmc` mode compares real desilike pipeline chains only.
 - Non-Gaussian `bphi_z` priors are represented by weighted samples or tabulated log-density inputs.
+- The production PNG data vector is the joint `(ell=0, ell=2)` galaxy power-spectrum multipole vector with the matching Gaussian `thecov` covariance.
+- AbacusHOD LRG `want_rsd=True` catalogs are already in redshift space; downstream code must not apply a second RSD shift.
 
 The main validation command is:
 
@@ -991,23 +1089,27 @@ python python_scripts/validate_png_fnl_assumptions.py grid --output /tmp/png_fnl
 ```
 ```
 
-- [ ] **Step 2: Run documentation grep checks**
+- [ ] **Step 3: Update project state**
+
+Update `docs/PROJECT_STATE.md` so its assumptions/scope section no longer says the main PNG pipeline is monopole-only. It must say the target implementation jointly fits redshift-space monopole and quadrupole, and that the Gaussian covariance is provided by `thecov`.
+
+- [ ] **Step 4: Run documentation grep checks**
 
 Run:
 
 ```bash
-rg -n "Approach A|Approach B|grid mode|mcmc mode|weighted samples|tabulated log-density" docs/superpowers/plans/fnl_sampling_implementation_validation_plan.md python_scripts/README.md
+rg -n "Scenario A|Scenario B|Scenario C|ell=0|ell=2|thecov|want_rsd|grid mode|mcmc mode|weighted samples|tabulated log-density" README.md docs/PROJECT_STATE.md docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md python_scripts/README.md
 ```
 
-Expected: output contains all six phrases.
+Expected: output contains all listed scope phrases.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 5: Commit**
 
 Run:
 
 ```bash
-git add python_scripts/README.md docs/superpowers/plans/fnl_sampling_implementation_validation_plan.md
-git commit -m "docs: document fnl validation strategy"
+git add README.md python_scripts/README.md docs/PROJECT_STATE.md docs/superpowers/plans/implementation/fnl_sampling_implementation_validation_plan.md
+git commit -m "docs: document fnl validation scope"
 ```
 
 Expected: commit succeeds.
@@ -1020,9 +1122,12 @@ Before claiming the plan is complete, verify:
 
 - `grid` mode never invokes a sampler.
 - `mcmc` mode does not generate synthetic chains.
-- Approach B never computes an unweighted `bfnl / bphi` sample ratio.
+- Scenario A has no universal sampled `fnl_loc`; compare it directly only at the individual-bin `bfnl_z` level unless explicitly post-processing with an external `bphi_z` prior.
+- B-marginal and any Scenario A post-processing utility never compute an unweighted `bfnl / bphi` sample ratio.
 - The `fnl_loc` prior is applied once after multiplying independent redshift-bin likelihood curves.
 - Both non-Gaussian `bphi_z` prior representations are covered by tests.
-- The primary comparison metric is the one-dimensional marginalized `fnl_loc` posterior.
+- The primary Scenario B/C comparison metric is the one-dimensional marginalized `fnl_loc` posterior.
+- The production PNG likelihood uses joint `(ell=0, ell=2)` galaxy power-spectrum multipoles and the matching `thecov` Gaussian covariance.
+- AbacusHOD LRG redshift-space catalogs are not RSD-shifted a second time downstream.
 
 ---
