@@ -616,7 +616,14 @@ def load_bphi_stats(path=BPHI_STATS_FILE):
     with open(path, "r", encoding="utf-8") as stream:
         for line in stream:
             line = line.strip()
-            if not line or line.startswith("#"):
+            if not line:
+                continue
+            if line.startswith("#"):
+                if "bphi=ln(Ngal_c000/Ngal_c004)" in line:
+                    raise ValueError(
+                        f"{path} uses the old SU bphi convention without the factor of 2. "
+                        "Regenerate it with HOD_bphi.py so bphi=2*ln(Ngal_c000/Ngal_c004)/ln(0.807952/0.75)."
+                    )
                 continue
             parts = line.split()
             tracer, zsnap, _, _, _, bphi = parts[:6]
