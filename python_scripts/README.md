@@ -1,4 +1,4 @@
-# b_phi Work Summary (through 10 May 2026)
+# b_phi Work Summary (through 17 May 2026)
 
 ## Goal
 Focused on debugging and stabilizing the PNG/bphi prior fitting workflow, improving diagnostics/plots, and preparing a clean path to include physically motivated `b1` truth markers in triangle plots.
@@ -15,8 +15,12 @@ Focused on debugging and stabilizing the PNG/bphi prior fitting workflow, improv
 ## Priors and Likelihood Logic
 - Reviewed desilike PNG parameter priors for `b-p`, `bfnl`, and `bphi` modes from source.
 - Updated flat-prior handling to use absolute limits consistently (`FLAT_PRIORS` usage cleanup).
-- Updated z=1.1 bphi prior center/width in the pipeline:
-  - `N(1.99211960, 1.2898^2)` for bphi prior usage.
+- Corrected the SU abundance-response convention to include the PNG factor of 2:
+  - `bphi = 2 * ln(Ngal_c000 / Ngal_c004) / ln(0.807952 / 0.75)`.
+- Current LRG bphi prior centers/widths are:
+  - z=0.500: `N(3.10823245, 1.8469^2)`
+  - z=0.800: `N(3.86419230, 2.1879^2)`
+  - z=1.100: `N(3.98423919, 2.5797^2)`
 - Implemented combined-prior treatment for the required case:
   - `mode == "bfnl"` and `use_bphi_prior == True`.
 - Added a custom combined prior term that supports `bphi * fnl` consistency in the `bfnl` workflow.
@@ -76,13 +80,14 @@ Focused on debugging and stabilizing the PNG/bphi prior fitting workflow, improv
 - `b_phi/HOD_utils.py`
 - `b_phi/HOD_bphi.py`
 
-## Current Status: 10 May 2026
+## Current Status: 17 May 2026
 - Core fitting/debug pipeline is functional with enhanced diagnostics and clearer prior-handling behavior.
   - Combined `bfnl + bphi-prior` logic is in place for your required simultaneous mode/prior configuration.
   - desilike `bfnl` pipeline still needs follow-up validation/fixing.
   - Joint/single posterior visualization now includes ML/MAP markers and truth-reference overlays.
+    - solving problems of biased `b1` measurement: the previous data vectors and covariance calibration Pk are all with shotnoise
 - HOD-side `b1` integration path is implemented and ready for production compute runs.
   - ~AbacusHOD secondary-redshift handling is now patched for `z = 0.950` via automatic NFW fallback: the HOD parameters in the published paper doesn't work on this snapshot~
-  - rerun the SU/PNG HOD catalog production and collect the new `b1` outputs.
   - ~use the real-space Pk of PNG HOD catalogues to fit bphi true values: the first 2 point dominates the fitting. Moreoever, either or not including these two cannot reproduce similar bphi from the universality relation~
+  - rerun the SU/PNG HOD catalog production and collect the new `b1` outputs.
   - 
