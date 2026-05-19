@@ -57,6 +57,57 @@ Focused on debugging and stabilizing the PNG/bphi prior fitting workflow, improv
   - RSD clustering products (`wp`, `xi0`, `xi2`, and RSD `Pk`) kept for standard outputs
 - Extended bphi table parsing/writing to accept an optional `b1` column and made pipeline loading robust to missing/NaN entries.
 
+## PNG Data Vector and HOD Redshift-Space Convention
+
+- The target PNG fitting data vector is the joint redshift-space galaxy
+  power-spectrum multipole vector `(ell=0, ell=2)`. The monopole and quadrupole
+  must be fit together with the matching Gaussian covariance supplied by
+  `thecov`.
+- AbacusHOD LRG mocks generated with `want_rsd: True` already contain
+  redshift-space positions. Do not manually shift those LRG positions again
+  before measuring `P_0` and `P_2`.
+- LRG centrals are placed at halo-center positions, but their velocities include
+  the configured central velocity-bias/scatter term.
+- LRG satellites are not generally halo-center objects. For the primary
+  `use_particles: True` path, their positions follow particle/subsample
+  positions and their velocities include a 1-halo contribution controlled by
+  `alpha_s`.
+- AbacusHOD secondary-redshift fallback uses NFW satellite placement; validation
+  reports should distinguish this from the particle-subsample satellite path.
+- ELG/HODDIES mocks use separate RSD and satellite-velocity settings
+  (`vel_sat`, `f_sigv`, `vsmear`). Audit whether HODDIES has already applied RSD
+  before applying any local ELG redshift-space shift.
+
+## fnl_loc Validation Strategy
+
+- **Scenario A: bfnl baseline** runs desilike `mode="bfnl"` and samples one
+  product amplitude `B_i = b_{\phi,i} fnl_loc` per independent tracer/redshift
+  bin, with no `bphi_i` prior and no universal sampled `fnl_loc`. In code this
+  product amplitude is usually named `bfnl_z` or `bfnl_loc`.
+- **Scenario B: HOD-informed Gaussian bphi prior** targets one universal
+  `fnl_loc` with one Gaussian HOD prior
+  `pi_i(beta_i) = Normal(beta_i; mu_bphi_i, sigma_bphi_i^2)` for each
+  `bphi_i`. Validate both B-direct (`mode="bphi"` sampling of `fnl_loc` and
+  each `bphi_i`) and B-marginal (custom likelihood marginalizing each Gaussian
+  `bphi_i` prior) before selecting the official implementation.
+- **Scenario C: fixed-p universality** fixes
+  `bphi_i = 2 delta_c (b1_i - p_i)` with tracer/sample-specific fixed `p_i`
+  values and samples one universal `fnl_loc`.
+- B-marginal follows the `paper/main.tex` appendix formalism:
+  `L_i^marg(f) = integral d beta_i L_i(B_i = f beta_i) pi_i(beta_i)`, followed
+  by one common `fnl_loc` prior after multiplying independent bin likelihoods.
+- If both `L_i(B_i)` and the Gaussian `bphi_i` prior are Gaussian, use the
+  analytic Gaussian-Gaussian expression from `Bhat_i`, `sigma_B_i`,
+  `mu_bphi_i`, and `sigma_bphi_i`; Gauss-Hermite quadrature is not needed.
+- If the Gaussian `bphi_i` prior is kept but `L_i(B_i)` is numerical,
+  Gauss-Hermite quadrature implements the same marginalization integral.
+- `grid` mode is deterministic quadrature for checking transformation math
+  without sampler noise.
+- `mcmc` mode compares real desilike pipeline chains only.
+- Non-Gaussian `bphi_i` priors are represented by weighted samples or tabulated
+  log-density inputs and use their own integration weights, not Gauss-Hermite
+  weights.
+
 ## AbacusHOD Runtime Update
 - Diagnosed the `bash HOD_one_lhc.sh 0 SU` failure from AbacusHOD:
   - `z_mock = 0.950` is treated as a secondary redshift by AbacusHOD.
@@ -89,5 +140,8 @@ Focused on debugging and stabilizing the PNG/bphi prior fitting workflow, improv
 - HOD-side `b1` integration path is implemented and ready for production compute runs.
   - ~AbacusHOD secondary-redshift handling is now patched for `z = 0.950` via automatic NFW fallback: the HOD parameters in the published paper doesn't work on this snapshot~
   - ~use the real-space Pk of PNG HOD catalogues to fit bphi true values: the first 2 point dominates the fitting. Moreoever, either or not including these two cannot reproduce similar bphi from the universality relation~
+<<<<<<< HEAD
   - rerun the SU/PNG HOD catalog production and collect the new `b1` outputs.
+=======
+>>>>>>> 4c7c4088897bfc2711b65e02c8cf8eb7ba526508
   - 
