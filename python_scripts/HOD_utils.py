@@ -3,8 +3,13 @@ import yaml
 import os
 from functools import lru_cache
 from pathlib import Path
-from abacusnbody.hod.GRAND_HOD import *
-from abacusnbody.hod.utils import setup_logging
+
+try:
+    from abacusnbody.hod.GRAND_HOD import *
+    from abacusnbody.hod.utils import setup_logging
+except ImportError:
+    def setup_logging(*args, **kwargs):
+        return None
 
 DEFAULT_NFW_DRAW_PATH = Path(__file__).resolve().parent / "archive/chains_ELG/data/nfw.npy"
 
@@ -240,3 +245,248 @@ def HOD_plot(tracer,zmin,zmax,sbins,output='./',ihod=''):
 
     plt.savefig(f'{output}/pk_{tracer}_z{zmin}z{zmax}{ihod}.png')
     plt.close()
+
+
+def _contour_scalar_float(value):
+    if value is None:
+        return None
+    try:
+        array = np.asarray(value)
+    except (TypeError, ValueError):
+        return None
+    if array.size != 1:
+        return None
+    return float(array.reshape(-1)[0])
+
+
+def _contour_find_param_key(params, basename):
+    for param in params:
+        name = str(param)
+        if name == basename or getattr(param, "basename", None) == basename:
+            return name
+    return None
+
+
+def triangle_params_with_bfnl_loc(chain, params, mode):
+    if mode == "bfnl":
+        fnl_params = chain.params(basename="fnl_loc")
+        return params + fnl_params if fnl_params else params
+    if mode not in ("bphi", "b-p"):
+        return params
+    bfnl_params = chain.params(basename="bfnl_loc")
+    if not bfnl_params:
+        return params
+    return params + bfnl_params
+
+
+def overlay_truth_on_triangle(g, params, basename, value, color="0.25", linestyle="-.", label=None):
+    key = _contour_find_param_key(params, basename)
+    if key is None or value is None:
+        return
+    axes = g.subplots
+    legend_done = False
+    for i, param_i in enumerate(params):
+        if str(param_i) == key:
+            this_label = label if not legend_done else None
+            axes[i, i].axvline(value, color=color, linestyle=linestyle, linewidth=1.0, alpha=0.9, label=this_label)
+            legend_done = True
+        for j in range(i):
+            ax = axes[i, j]
+            if str(params[j]) == key:
+                this_label = label if not legend_done else None
+                ax.axvline(value, color=color, linestyle=linestyle, linewidth=1.0, alpha=0.9, label=this_label)
+                legend_done = True
+            if str(param_i) == key:
+                this_label = label if not legend_done else None
+                ax.axhline(value, color=color, linestyle=linestyle, linewidth=1.0, alpha=0.9, label=this_label)
+                legend_done = True
+
+
+def overlay_truth_values_on_triangle(g, params, values, color="black", linestyle="-", linewidth=1.1):
+    if not values:
+        return
+    axes = g.subplots
+    values = {str(name): _contour_scalar_float(value) for name, value in values.items()}
+    values = {name: value for name, value in values.items() if value is not None}
+    for i, param_i in enumerate(params):
+        name_i = str(param_i)
+        value_i = values.get(name_i)
+        if value_i is not None:
+            axes[i, i].axvline(value_i, color=color, linestyle=linestyle, linewidth=linewidth, alpha=0.95)
+        for j in range(i):
+            ax = axes[i, j]
+            name_j = str(params[j])
+            value_j = values.get(name_j)
+            if value_j is not None:
+                ax.axvline(value_j, color=color, linestyle=linestyle, linewidth=linewidth, alpha=0.95)
+            if value_i is not None:
+                ax.axhline(value_i, color=color, linestyle=linestyle, linewidth=linewidth, alpha=0.95)
+
+
+def annotate_joint_triangle_map(g, params, entries, true_fnl_loc):
+    axes = np.asarray(g.subplots)
+    if axes.size == 0:
+        return
+    fig = axes.flat[0].figure
+    fig.text(
+        0.02,
+        0.02,
+        "Star: maximum likelihood. Circle: MAP. Black lines: true fNL and best-fit b1.",
+        ha="left",
+        va="bottom",
+        fontsize=9,
+    )
+
+
+def overlay_markers_on_triangle(g, params, point, color, marker, label=None, diagonal_ls="--", size=48):
+    if point is None:
+        return
+    axes = g.subplots
+    legend_done = False
+    for i, param_i in enumerate(params):
+        value_i = _contour_scalar_float(point.get(str(param_i)))
+        if value_i is None:
+            continue
+        ax_diag = axes[i, i]
+        ax_diag.axvline(value_i, color=color, linestyle=diagonal_ls, linewidth=1.0, alpha=0.9)
+        this_label = label if not legend_done else None
+        ax_diag.scatter(
+            [value_i],
+            [0.92],
+            transform=ax_diag.get_xaxis_transform(),
+            color=color,
+            marker=marker,
+            s=size,
+            zorder=10,
+            label=this_label,
+            edgecolors="black" if marker not in [".", ",", "|", "_"] else None,
+            linewidths=0.4,
+        )
+        legend_done = True
+        for j in range(i):
+            value_j = _contour_scalar_float(point.get(str(params[j])))
+            if value_j is None:
+                continue
+            ax = axes[i, j]
+            this_label = label if not legend_done else None
+            ax.scatter(
+                value_j,
+                value_i,
+                color=color,
+                marker=marker,
+                s=size,
+                zorder=10,
+                label=this_label,
+                edgecolors="black" if marker not in [".", ",", "|", "_"] else None,
+                linewidths=0.4,
+            )
+            legend_done = True
+
+
+def _product_chain(product, prefer="chain"):
+    if hasattr(product, prefer):
+        return getattr(product, prefer)
+    other = "rchain" if prefer == "chain" else "chain"
+    if hasattr(product, other):
+        return getattr(product, other)
+    return product
+
+
+def _std_from_product(product, param):
+    if hasattr(product, "std"):
+        return float(product.std(param))
+    chain = _product_chain(product)
+    if hasattr(chain, "std"):
+        return float(chain.std(param))
+    return float(np.std(np.asarray(chain[param])))
+
+
+def report_improvement(products, params=None, items=None, item_std="LL", print_result=True):
+    if params is None:
+        params = ["logA", "sigma8_cb", "omega_cdm", "Omega_m", "H0", "elg.b1"]
+    if items is None:
+        items = [item for item in products if item != item_std] if isinstance(products, dict) else []
+    if not isinstance(products, dict):
+        raise ValueError("report_improvement expects a dictionary of products/chains keyed by item name.")
+
+    summary = {}
+    for item in items:
+        summary[item] = {}
+        if print_result:
+            print(f"{item:20}: ", end="")
+        for param in params:
+            fiducial = _std_from_product(products[item_std], param)
+            value = 1.0 - _std_from_product(products[item], param) / fiducial
+            summary[item][param] = value
+            if print_result:
+                print(f"{param}({value:.2%}) ", end="")
+        if print_result:
+            print()
+    return summary
+
+
+def plot_contours(
+    chains,
+    params=None,
+    items=None,
+    extra_info=None,
+    item_std="LL",
+    texts="data: complete abacus mocks; cov: holi-v3-altmtl",
+    fn=None,
+    show=True,
+    filled=None,
+    markers=None,
+    truth=None,
+    **kwargs,
+):
+    if params is None:
+        params = ["logA", "sigma8_cb", "omega_cdm", "Omega_m", "H0", "elg.b1"]
+
+    if isinstance(chains, dict):
+        labels = [item_std] if item_std in chains else []
+        labels += [item for item in (items or chains) if item != item_std]
+        plot_chains = [
+            _product_chain(chains[label], prefer="chain" if label == item_std else "rchain")
+            for label in labels
+        ]
+    else:
+        plot_chains = list(chains)
+        labels = list(items) if items is not None else [f"chain {i}" for i in range(len(plot_chains))]
+        if len(labels) != len(plot_chains):
+            raise ValueError("items must have the same length as chains.")
+
+    if extra_info is not None:
+        if isinstance(extra_info, (list, tuple)):
+            if len(extra_info) == len(labels):
+                labels = [f"{label} {extra}" for label, extra in zip(labels, extra_info)]
+            else:
+                labels = [f"{label} {' '.join(str(extra) for extra in extra_info)}" for label in labels]
+        else:
+            labels = [f"{label} {extra_info}" for label in labels]
+
+    if filled is None and isinstance(chains, dict) and labels and labels[0].startswith(str(item_std)):
+        filled = [True] + [False] * (len(labels) - 1)
+
+    from desilike.samples import plotting
+    g = plotting.plot_triangle(
+        plot_chains,
+        params=params,
+        labels=labels,
+        filled=filled,
+        markers=markers,
+        **kwargs,
+    )
+
+    if truth:
+        overlay_truth_values_on_triangle(g, params, truth)
+
+    if texts:
+        import matplotlib.pyplot as plt
+        plt.suptitle(texts, x=0.7, y=0.7, fontsize="large")
+    if fn is not None:
+        g.export(str(fn))
+    elif show:
+        import matplotlib.pyplot as plt
+        plt.show()
+
+    return g

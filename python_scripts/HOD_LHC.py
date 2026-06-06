@@ -103,7 +103,10 @@ def HOD_lhc(tracer, redshift, N_samples):
 
         for i, name in enumerate(names):
             mu, sigma = bounds[name]
-            samples[:, i] = norm.ppf(u[:, i], loc=mu, scale=sigma*3)
+            if redshift == 1.1:
+                samples[:, i] = norm.ppf(u[:, i], loc=mu, scale=sigma) # for z=1.1, 1sigma is enough
+            else:
+                samples[:, i] = norm.ppf(u[:, i], loc=mu, scale=sigma*3)
 
         # Convert to DataFrame
         df = pd.DataFrame(samples, columns=names)
@@ -141,7 +144,10 @@ def HOD_lhc(tracer, redshift, N_samples):
 
     for i, (name, (mu, sigma)) in enumerate(bounds.items()):
         x = np.linspace(plot_ranges[i][0], plot_ranges[i][1], 501)
-        pdf = norm.pdf(x, loc=mu, scale=sigma*3)
+        if redshift == 1.1:
+            pdf = norm.pdf(x, loc=mu, scale=sigma)
+        else:
+            pdf = norm.pdf(x, loc=mu, scale=sigma*3)
         ax = axes[i, i]
         ax.plot(x, pdf*plot_rescale)
         ax.set_xticks([])
@@ -171,9 +177,6 @@ if __name__ == "__main__":
     else:
         zsnaps = [0.5, 0.8, 1.1, 1.325, 1.85, 2.5]
 
-    cosmos = ['000','004']
-    outdir = "/pscratch/sd/j/jiaxi/b_phi/mocks_lhc"
-    os.makedirs(outdir, exist_ok=True)
 
     for zmin,zmax,zsnap in zip(zmins,zmaxs,zsnaps):
         # --- builds df_lhc and broadcasts ---

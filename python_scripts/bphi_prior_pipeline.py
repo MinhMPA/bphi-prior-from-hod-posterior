@@ -6,6 +6,14 @@ from pathlib import Path
 
 import numpy as np
 
+from HOD_utils import (
+    annotate_joint_triangle_map,
+    overlay_markers_on_triangle,
+    overlay_truth_on_triangle,
+    overlay_truth_values_on_triangle,
+    triangle_params_with_bfnl_loc,
+)
+
 
 ROOT = Path(__file__).resolve().parent
 BAOCOV_FILE = ROOT.parent / "PFS_mock-tests" / "baocov.py"
@@ -15,9 +23,19 @@ MOCK_DIRS = {
 }
 PNG_MOCK_DIR = MOCK_DIRS["PNG"]
 BPHI_STATS_FILE = ROOT / "backup" / "bphi_AbacusHOD_LRG.txt"
+BPHI_STATS_UPDATE_FILES = (ROOT / "backup" / "bphi_AbacusHOD_z1.1_updated.txt",)
+BPHI_BESTFIT_B1_FILE = ROOT / "bphi_true_value_PNGmock_fit" / "b1_with-sn0.txt"
+BPHI_SU_DENOM = np.log(0.807952 / 0.75)
 BOXSIZE = 2000.0
 DEFAULT_NTHREAD = 32
 DEFAULT_ZS = [0.5, 0.8, 1.1]
+ASSEMBLY_BIAS_SUFFIX = "_Bcentm0p040_Bsatm0p170"
+COV_VEFF_P0 = 10000.0
+COV_VEFF_CONFIG = {
+    0.5: (0.4, 0.6, 17000.0),
+    0.8: (0.6, 0.8, 17000.0),
+    1.1: (0.8, 1.1, 14000.0),
+}
 PNG_MODES = ("bphi", "b-p", "bfnl")
 PRIORS_FLAT = {"bphi": 10, "fnl_loc": 300}
 BPHI_BFNL_PRIOR_NGRID = 4096
@@ -76,6 +94,10 @@ def ell_tag(ells):
     return "" if ells == (0,) else "_ells" + "-".join(str(ell) for ell in ells)
 
 
+def abias_suffix_from_args(args):
+    return ASSEMBLY_BIAS_SUFFIX if getattr(args, "assembly_bias", False) else ""
+
+
 def default_config_path(zsnap, cosmo="000"):
     return ROOT / "HOD_config" / f"abacushod_z{ztag(zsnap)}_c{cosmo}.yaml"
 
@@ -86,19 +108,28 @@ def mock_dir(simtype):
     return MOCK_DIRS[simtype]
 
 
-def mock_pk_path(tracer, zsnap, cosmo="000", simtype="SU"):
-    return mock_dir(simtype) / f"{tracer}_z{ztag(zsnap)}_c{cosmo}_default_pk_RSD.npy"
+def mock_pk_path(tracer, zsnap, cosmo="000", simtype="SU", abias_suffix=""):
+    return mock_dir(simtype) / f"{tracer}_z{ztag(zsnap)}_c{cosmo}_default{abias_suffix}_pk_RSD.npy"
 
 def png_mock_b1_path(tracer, zsnap, cosmo="000"):
     return PNG_MOCK_DIR / f"{tracer}_z{ztag(zsnap)}_c{cosmo}_default_b1.txt"
 
 
-def default_pk_path(tracer, zsnap, cosmo="000", simtype="SU"):
-    return mock_pk_path(tracer, zsnap, cosmo=cosmo, simtype=simtype)
+def load_bestfit_b1(zsnap, path=BPHI_BESTFIT_B1_FILE):
+    data = np.loadtxt(path, comments="#", ndmin=2)
+    matches = data[np.isclose(data[:, 0], float(zsnap))]
+    if matches.size == 0:
+        raise ValueError(f"No best-fit b1 entry for zsnap={zsnap} in {path}")
+    return float(matches[0, 1])
 
 
-def default_cov_path(tracer, zsnap, cosmo="000", simtype="SU", ells=(0,)):
-    return mock_dir(simtype) / f"{tracer}_z{ztag(zsnap)}_c{cosmo}_default_cov{ell_tag(ells)}_RSD.npy"
+def default_pk_path(tracer, zsnap, cosmo="000", simtype="SU", abias_suffix=""):
+    return mock_pk_path(tracer, zsnap, cosmo=cosmo, simtype=simtype, abias_suffix=abias_suffix)
+
+
+def default_cov_path(tracer, zsnap, cosmo="000", simtype="SU", ells=(0,), cov_veff=False):
+    veff_tag = "_veff" if cov_veff else ""
+    return mock_dir(simtype) / f"{tracer}_z{ztag(zsnap)}_c{cosmo}_default_cov{ell_tag(ells)}{veff_tag}_RSD.npy"
 
 
 def load_yaml(path):
@@ -185,8 +216,8 @@ def load_png_rebinned_pk(path, kmin=0.0, kmax=0.1, dk=0.002, ells=(0,)):
     return data
 
 
-def load_pk(tracer, zsnap, cosmo="000", simtype="SU", kmin=0.0, kmax=0.1, dk=0.002, ells=(0,)):
-    pk_path = default_pk_path(tracer, zsnap, cosmo=cosmo, simtype=simtype)
+def load_pk(tracer, zsnap, cosmo="000", simtype="SU", kmin=0.0, kmax=0.1, dk=0.002, ells=(0,), abias_suffix=""):
+    pk_path = default_pk_path(tracer, zsnap, cosmo=cosmo, simtype=simtype, abias_suffix=abias_suffix)
     return load_png_rebinned_pk(pk_path, kmin=kmin, kmax=kmax, dk=dk, ells=ells)
 
 
@@ -227,11 +258,12 @@ def make_lsstype_pk_observable(pk_data, indices=None):
     return Mesh2SpectrumPoles(poles, ells=ells)
 
 
-def load_covariance(tracer, zsnap, cosmo="000", simtype="SU", kmin=0.0, kmax=0.1, dk=0.002, ells=(0,)):
+def load_covariance(tracer, zsnap, cosmo="000", simtype="SU", kmin=0.0, kmax=0.1, dk=0.002, ells=(0,), cov_veff=False, cov_cosmo=None, abias_suffix=""):
     CovarianceMatrix, _, _ = import_lsstypes()
     ells = normalize_ells(ells)
-    label = f"{simtype} {tracer} z={zsnap:.3f} c{cosmo}"
-    covariance_path = default_cov_path(tracer, zsnap, cosmo=cosmo, simtype=simtype, ells=ells)
+    cov_cosmo = cosmo if cov_cosmo is None else cov_cosmo
+    label = f"{simtype} {tracer} z={zsnap:.3f} data c{cosmo} cov c{cov_cosmo}"
+    covariance_path = default_cov_path(tracer, zsnap, cosmo=cov_cosmo, simtype=simtype, ells=ells, cov_veff=cov_veff)
     covariance = np.asarray(np.load(covariance_path), dtype="f8")
     if covariance.ndim != 2 or covariance.shape[0] != covariance.shape[1]:
         raise ValueError(
@@ -250,7 +282,7 @@ def load_covariance(tracer, zsnap, cosmo="000", simtype="SU", kmin=0.0, kmax=0.1
     reference_kmax = max(float(kmax), covariance_nbins * float(dk))
     pk_data = load_pk(
         tracer, zsnap, cosmo=cosmo, simtype=simtype,
-        kmin=0.0, kmax=reference_kmax, dk=dk, ells=ells,
+        kmin=0.0, kmax=reference_kmax, dk=dk, ells=ells, abias_suffix=abias_suffix,
     )
     k = np.asarray(pk_data["k"], dtype="f8")
     if covariance_nbins > k.size:
@@ -311,7 +343,7 @@ def load_covariance(tracer, zsnap, cosmo="000", simtype="SU", kmin=0.0, kmax=0.1
     }
 
 
-def compute_thecov_gaussian_covariance(pk_data, kmin=0.0, kmax=0.1, dk=0.002, ells=(0,)):
+def compute_thecov_gaussian_covariance(pk_data, kmin=0.0, kmax=0.1, dk=0.002, ells=(0,), volume=None):
     import thecov.covariance
     import thecov.geometry
 
@@ -322,8 +354,9 @@ def compute_thecov_gaussian_covariance(pk_data, kmin=0.0, kmax=0.1, dk=0.002, el
     if np.count_nonzero(mask) != expected_nbins:
         mask = (k >= kmin) & (k <= kmax)
 
+    volume = float(pk_data.get("covariance_volume", float(pk_data["boxsize"]) ** 3)) if volume is None else float(volume)
     geometry = thecov.geometry.BoxGeometry(
-        volume=float(pk_data["boxsize"]) ** 3,
+        volume=volume,
         nbar=float(pk_data["nbar"]),
     )
     gaussian = thecov.covariance.GaussianCovariance(geometry)
@@ -345,11 +378,54 @@ def compute_thecov_gaussian_covariance(pk_data, kmin=0.0, kmax=0.1, dk=0.002, el
     ])
 
 
-def save_covariance(tracer, zsnap, covariance, cosmo="000", simtype="SU", ells=(0,)):
+def save_covariance(tracer, zsnap, covariance, cosmo="000", simtype="SU", ells=(0,), cov_veff=False):
     ensure_dir(mock_dir(simtype))
-    output = default_cov_path(tracer, zsnap, cosmo=cosmo, simtype=simtype, ells=ells)
+    output = default_cov_path(tracer, zsnap, cosmo=cosmo, simtype=simtype, ells=ells, cov_veff=cov_veff)
     np.save(output, covariance)
     return output
+
+
+def cov_veff_for_zsnap(zsnap):
+    config = None
+    for zref, item in COV_VEFF_CONFIG.items():
+        if np.isclose(float(zsnap), zref, rtol=0.0, atol=1.0e-8):
+            config = item
+            break
+    if config is None:
+        raise ValueError(f"No --cov-veff configuration for zsnap={zsnap:g}.")
+
+    from effective_volume import read_nz, veff_from_file
+
+    zmin, zmax, area_total = config
+    ngc_file = ROOT / "LRG_NGC_nz.txt"
+    sgc_file = ROOT / "LRG_SGC_nz.txt"
+    ngc_area0 = read_nz(ngc_file)["area"]
+    sgc_area0 = read_nz(sgc_file)["area"]
+    area_ngc = area_total * ngc_area0 / (ngc_area0 + sgc_area0)
+    area_sgc = area_total * sgc_area0 / (ngc_area0 + sgc_area0)
+    ngc = veff_from_file(ngc_file, zmin, zmax, COV_VEFF_P0, area_ngc)
+    sgc = veff_from_file(sgc_file, zmin, zmax, COV_VEFF_P0, area_sgc)
+    veff = ngc[0] + sgc[0]
+    print(
+        f"Computed --cov-veff for z={zsnap:.3f}: {zmin:g}<z<{zmax:g}, "
+        f"area={area_total:g} deg^2, P0={COV_VEFF_P0:g}, "
+        f"V_eff={veff:.6e} (Mpc/h)^3 = {veff / 1.0e9:.6f} (Gpc/h)^3"
+    )
+    return veff
+
+
+def volume_for_index(volumes, zsnaps, index, cov_veff=False):
+    if cov_veff:
+        if volumes is not None:
+            raise ValueError("Use either --volume or --cov-veff, not both.")
+        return cov_veff_for_zsnap(zsnaps[index])
+    if volumes is None:
+        return None
+    if len(volumes) == 1:
+        return float(volumes[0])
+    if len(volumes) != len(zsnaps):
+        raise ValueError("--volume must have either one value or one value per --zsnaps entry.")
+    return float(volumes[index])
 
 
 def fit_prefix(tracer, zsnaps, mode, simtype, cosmo, use_bphi_prior, ells=(0,)):
@@ -545,110 +621,6 @@ def add_fnl_loc_to_bfnl_chain(chain, tracer, zsnaps, bphi_stats=None):
     return chain
 
 
-def triangle_params_with_bfnl_loc(chain, params, mode):
-    if mode == "bfnl":
-        fnl_params = chain.params(basename="fnl_loc")
-        return params + fnl_params if fnl_params else params
-    if mode not in ("bphi", "b-p"):
-        return params
-    bfnl_params = chain.params(basename="bfnl_loc")
-    if not bfnl_params:
-        return params
-    return params + bfnl_params
-
-
-def overlay_truth_on_triangle(g, params, basename, value, color="0.25", linestyle="-.", label=None):
-    key = find_param_key(params, basename)
-    if key is None or value is None:
-        return
-    axes = g.subplots
-    legend_done = False
-    for i, param_i in enumerate(params):
-        if str(param_i) == key:
-            this_label = label if not legend_done else None
-            axes[i, i].axvline(value, color=color, linestyle=linestyle, linewidth=1.0, alpha=0.9, label=this_label)
-            legend_done = True
-        for j in range(i):
-            ax = axes[i, j]
-            if str(params[j]) == key:
-                this_label = label if not legend_done else None
-                ax.axvline(value, color=color, linestyle=linestyle, linewidth=1.0, alpha=0.9, label=this_label)
-                legend_done = True
-            if str(param_i) == key:
-                this_label = label if not legend_done else None
-                ax.axhline(value, color=color, linestyle=linestyle, linewidth=1.0, alpha=0.9, label=this_label)
-                legend_done = True
-
-
-def overlay_truth_values_on_triangle(g, params, values, color="black", linestyle="-", linewidth=1.1):
-    if not values:
-        return
-    axes = g.subplots
-    values = {str(name): scalar_float(value) for name, value in values.items()}
-    values = {name: value for name, value in values.items() if value is not None}
-    for i, param_i in enumerate(params):
-        name_i = str(param_i)
-        value_i = values.get(name_i)
-        if value_i is not None:
-            axes[i, i].axvline(value_i, color=color, linestyle=linestyle, linewidth=linewidth, alpha=0.95)
-        for j in range(i):
-            ax = axes[i, j]
-            name_j = str(params[j])
-            value_j = values.get(name_j)
-            if value_j is not None:
-                ax.axvline(value_j, color=color, linestyle=linestyle, linewidth=linewidth, alpha=0.95)
-            if value_i is not None:
-                ax.axhline(value_i, color=color, linestyle=linestyle, linewidth=linewidth, alpha=0.95)
-
-
-def annotate_joint_triangle_map(g, params, entries, true_fnl_loc):
-    return
-
-def overlay_markers_on_triangle(g, params, point, color, marker, label=None, diagonal_ls="--", size=48):
-    if point is None:
-        return
-    axes = g.subplots
-    legend_done = False
-    for i, param_i in enumerate(params):
-        value_i = scalar_float(point.get(str(param_i)))
-        if value_i is None:
-            continue
-        ax_diag = axes[i, i]
-        ax_diag.axvline(value_i, color=color, linestyle=diagonal_ls, linewidth=1.0, alpha=0.9)
-        this_label = label if not legend_done else None
-        ax_diag.scatter(
-            [value_i],
-            [0.92],
-            transform=ax_diag.get_xaxis_transform(),
-            color=color,
-            marker=marker,
-            s=size,
-            zorder=10,
-            label=this_label,
-            edgecolors="black" if marker not in [".", ",", "|", "_"] else None,
-            linewidths=0.4,
-        )
-        legend_done = True
-        for j in range(i):
-            value_j = scalar_float(point.get(str(params[j])))
-            if value_j is None:
-                continue
-            ax = axes[i, j]
-            this_label = label if not legend_done else None
-            ax.scatter(
-                value_j,
-                value_i,
-                color=color,
-                marker=marker,
-                s=size,
-                zorder=10,
-                label=this_label,
-                edgecolors="black" if marker not in [".", ",", "|", "_"] else None,
-                linewidths=0.4,
-            )
-            legend_done = True
-
-
 def triangle_chain_selection(
     cosmo,
     use_bphi_prior,
@@ -760,6 +732,7 @@ def maybe_plot_joint_triangle(tracer, zsnaps, mode, simtype, cosmo, ells=(0,)):
             entry["bestfit"],
             color=entry["color"],
             marker="*",
+            label=f"{entry['label']} maximum likelihood",
             diagonal_ls="--",
             size=72,
         )
@@ -769,6 +742,7 @@ def maybe_plot_joint_triangle(tracer, zsnaps, mode, simtype, cosmo, ells=(0,)):
             entry["map"],
             color=entry["color"],
             marker="o",
+            label=f"{entry['label']} MAP",
             diagonal_ls=":",
             size=42,
         )
@@ -787,42 +761,174 @@ def maybe_plot_joint_triangle(tracer, zsnaps, mode, simtype, cosmo, ells=(0,)):
     g.export(str(output))
     return output
 
+def fnl_marginalise_bphi(
+    tracer,
+    zsnaps,
+    use_bphi_prior=True,
+    mode="bfnl",
+    simtype="SU",
+    cosmo="000",
+    ells=(0,),
+):
+    from desilike.samples import Chain
 
-def load_bphi_stats(path=BPHI_STATS_FILE):
+    prefix = fit_prefix(tracer, zsnaps, mode, simtype, cosmo, use_bphi_prior, ells=ells)
+    chain_fn = Path(f"{prefix}_chain.npy")
+    burnin, thin = single_triangle_chain_selection(cosmo, use_bphi_prior)
+
+    chain = Chain.load(chain_fn).remove_burnin(burnin)[::thin]
+    stats = load_bphi_stats()
+    names = [f"{tracer_z_label(tracer, z)}.bfnl_loc" for z in zsnaps]
+    mu = np.array([stats[(tracer, z)]["mean"] for z in zsnaps])
+    sig = np.array([stats[(tracer, z)]["std"] for z in zsnaps])
+    bfnl = np.vstack([np.ravel(np.asarray(chain[name])) for name in names]).T
+
+    F = flat_prior_abs("fnl_loc")
+    ngrid = int(os.environ.get("BPHI_BFNL_PRIOR_NGRID", BPHI_BFNL_PRIOR_NGRID))
+    if ngrid % 2:
+        ngrid += 1
+    edges = np.linspace(-F, F, ngrid + 1)
+    fgrid = 0.5 * (edges[1:] + edges[:-1])   # avoids exactly zero
+
+    fnl_samples = []
+    rng = np.random.default_rng(42)
+
+    for beta in bfnl:
+        bphi = beta[:, None] / fgrid[None, :]
+        logp = np.sum(-0.5 * ((bphi - mu[:, None]) / sig[:, None])**2
+                    - np.log(sig[:, None])
+                    - np.log(np.abs(fgrid))[None, :], axis=0)
+        p = np.exp(logp - logsumexp(logp))
+        fnl_samples.append(rng.choice(fgrid, p=p / p.sum()))
+
+    fnl_samples = np.array(fnl_samples)
+    print(np.percentile(fnl_samples, [16, 50, 84]))
+    return fnl_samples
+
+def plot_fnl_marginalise_bphi(
+    tracer,
+    zsnaps,
+    use_bphi_prior=True,
+    mode="bfnl",
+    simtype="SU",
+    cosmo="000",
+    ells=(0,),
+    compare=None,
+    bins=80,
+):
+    import matplotlib.pyplot as plt
+    from desilike.samples import Chain
+
+    fnl_samples = fnl_marginalise_bphi(
+        tracer, zsnaps, use_bphi_prior=use_bphi_prior, mode=mode,
+        simtype=simtype, cosmo=cosmo, ells=ells,
+    )
+    if compare is None:
+        compare = [
+            ("bphi", False, "bphi, no prior"),
+            ("bphi", True, "bphi, with prior"),
+        ]
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.hist(fnl_samples, bins=bins, density=True, histtype="step", linewidth=1.8,
+            label="bfnl + p(fnl | bfnl)")
+
+    for compare_mode, compare_prior, label in compare:
+        prefix = fit_prefix(tracer, zsnaps, compare_mode, simtype, cosmo, compare_prior, ells=ells)
+        chain_fn = Path(f"{prefix}_chain.npy")
+        if not chain_fn.exists():
+            continue
+        burnin, thin = single_triangle_chain_selection(cosmo, compare_prior)
+        chain = Chain.load(chain_fn).remove_burnin(burnin)[::thin]
+        fnl_key = find_param_key(chain.params(), "fnl_loc")
+        if fnl_key is None:
+            continue
+        ax.hist(np.ravel(np.asarray(chain[fnl_key])), bins=bins, density=True,
+                histtype="step", linewidth=1.3, label=label)
+
+    true_fnl = true_fnl_loc_for_cosmo(cosmo)
+    if true_fnl is not None:
+        ax.axvline(true_fnl, color="black", linestyle="--", linewidth=1.0, label="truth")
+    ax.set_xlabel(r"$f_{\mathrm{NL}}^{\mathrm{loc}}$")
+    ax.set_ylabel("posterior density")
+    ax.legend(frameon=False)
+
+    prefix = fit_prefix(tracer, zsnaps, mode, simtype, cosmo, use_bphi_prior, ells=ells)
+    output = Path(f"{prefix}_fnl_marginalise_bphi_1d.png")
+    fig.savefig(output, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    return output
+
+def load_bphi_stats(path=BPHI_STATS_FILE, update_paths=BPHI_STATS_UPDATE_FILES):
     stats = {}
     b1_stats = {}
-    with open(path, "r", encoding="utf-8") as stream:
-        for line in stream:
-            line = line.strip()
-            if not line:
-                continue
-            if line.startswith("#"):
-                if "bphi=ln(Ngal_c000/Ngal_c004)" in line:
-                    raise ValueError(
-                        f"{path} uses the old SU bphi convention without the factor of 2. "
-                        "Regenerate it with HOD_bphi.py so bphi=2*ln(Ngal_c000/Ngal_c004)/ln(0.807952/0.75)."
-                    )
-                continue
-            parts = line.split()
-            tracer, zsnap, _, _, _, bphi = parts[:6]
-            zsnap = float(zsnap)
-            key = (tracer, zsnap)
-            bphi = float(bphi)
-            stats.setdefault(key, []).append(bphi)
-            if len(parts) >= 7:
-                b1 = float(parts[6])
-                if np.isfinite(b1):
-                    b1_stats.setdefault(key, []).append(b1)
+    raw_counts = {}
+    raw_b1 = {}
+    base_path = Path(path)
+    paths = [base_path] + [Path(path) for path in update_paths if Path(path).exists()]
+    update_keys = set()
+
+    def add_bphi(tracer, zsnap, hod_id, bphi, b1=None):
+        key = (tracer, float(zsnap))
+        hod_id = int(hod_id)
+        stats.setdefault(key, {})[hod_id] = float(bphi)
+        if b1 is not None and np.isfinite(float(b1)):
+            b1_stats.setdefault(key, {})[hod_id] = float(b1)
+
+    def mark_update_key(tracer, zsnap):
+        key = (tracer, float(zsnap))
+        if key not in update_keys:
+            update_keys.add(key)
+            stats[key] = {}
+            b1_stats.pop(key, None)
+
+    for path in paths:
+        is_update = path != base_path
+        with open(path, "r", encoding="utf-8") as stream:
+            for line in stream:
+                line = line.strip()
+                if not line:
+                    continue
+                if line.startswith("#"):
+                    if "bphi=ln(Ngal_c000/Ngal_c004)" in line:
+                        raise ValueError(
+                            f"{path} uses the old SU bphi convention without the factor of 2. "
+                            "Regenerate it with HOD_bphi.py so bphi=2*ln(Ngal_c000/Ngal_c004)/ln(0.807952/0.75)."
+                        )
+                    continue
+                parts = line.split()
+                if len(parts) >= 5 and parts[2] in ("000", "004"):
+                    tracer, zsnap, cosmo, hod_id, ngal = parts[:5]
+                    if is_update:
+                        mark_update_key(tracer, zsnap)
+                    raw_key = (tracer, float(zsnap), int(hod_id))
+                    raw_counts.setdefault(raw_key, {})[cosmo] = float(ngal)
+                    if cosmo == "000" and len(parts) >= 6:
+                        raw_b1[raw_key] = float(parts[5])
+                    continue
+                tracer, zsnap, hod_id, _, _, bphi = parts[:6]
+                if is_update:
+                    mark_update_key(tracer, zsnap)
+                b1 = float(parts[6]) if len(parts) >= 7 else None
+                add_bphi(tracer, zsnap, hod_id, bphi, b1=b1)
+
+    for (tracer, zsnap, hod_id), counts in raw_counts.items():
+        if "000" not in counts or "004" not in counts:
+            continue
+        bphi = 2.0 * np.log(counts["000"] / counts["004"]) / BPHI_SU_DENOM
+        add_bphi(tracer, zsnap, hod_id, bphi, b1=raw_b1.get((tracer, zsnap, hod_id)))
+
     summary = {}
     for key, values in stats.items():
-        arr = np.asarray(values, dtype="f8")
+        hod_ids = sorted(values)
+        arr = np.asarray([values[hod_id] for hod_id in hod_ids], dtype="f8")
         item = {
-            "mean": float(arr[0]),
+            "mean": float(np.mean(arr)),
             "std": float(np.std(arr)),
             "n": int(arr.size),
         }
         if key in b1_stats:
-            b1 = np.asarray(b1_stats[key], dtype="f8")
+            b1 = np.asarray([b1_stats[key][hod_id] for hod_id in sorted(b1_stats[key])], dtype="f8")
             item["b1"] = float(b1[0])
             item["b1_std"] = float(np.std(b1))
             item["b1_n"] = int(b1.size)
@@ -830,12 +936,8 @@ def load_bphi_stats(path=BPHI_STATS_FILE):
     return summary
 
 def load_png_mock_b1(tracer, zsnap, cosmo="000", b1_cosmo="000"):
-    path = png_mock_b1_path(tracer, zsnap, cosmo=b1_cosmo)
-    data = np.loadtxt(path, dtype=str, comments="#", ndmin=2)
-
-    # columns:
-    # tracer zsnap kmin kmax b1 pk_file
-    b1 = float(data[0, 4])
+    path = BPHI_BESTFIT_B1_FILE
+    b1 = load_bestfit_b1(zsnap, path=path)
     bphi = 2.0 * 1.686 * (b1 - 1.0)
     true_fnl_loc = true_fnl_loc_for_cosmo(cosmo)
 
@@ -1055,6 +1157,8 @@ def build_joint_png_likelihood(
     kmax=0.1,
     dk=0.002,
     ells=(0,),
+    cov_veff=False,
+    abias_suffix="",
 ):
     from desilike.likelihoods import ObservablesGaussianLikelihood
     from desilike.observables.galaxy_clustering import TracerPowerSpectrumMultipolesObservable
@@ -1078,7 +1182,8 @@ def build_joint_png_likelihood(
         bphi_summary = bphi_stats[(tracer, zsnap)]
         covariance_data = load_covariance(
             tracer, zsnap, cosmo=cosmo, simtype=simtype,
-            kmin=likelihood_kmin, kmax=kmax, dk=dk, ells=ells,
+            kmin=likelihood_kmin, kmax=kmax, dk=dk, ells=ells, cov_veff=cov_veff, cov_cosmo="000",
+            abias_suffix=abias_suffix,
         )
         k_fit = np.asarray(covariance_data["k"], dtype="f8")
         data_fit = np.asarray(covariance_data["data"], dtype="f8")
@@ -1178,6 +1283,8 @@ def run_fit(
     dk=0.002,
     ells=(0,),
     run_sampler=False,
+    cov_veff=False,
+    abias_suffix="",
 ):
     # Respect user environment/PYTHONPATH by default.
     # Only override desilike import path when DESILIKE_LOCAL_PATH is explicitly set.
@@ -1206,6 +1313,8 @@ def run_fit(
         kmax=kmax,
         dk=dk,
         ells=ells,
+        cov_veff=cov_veff,
+        abias_suffix=abias_suffix,
     )
 
     ensure_dir(FIT_DIR)
@@ -1267,9 +1376,9 @@ def run_fit(
         if mode == "bfnl":
             profiler_bestfit = add_fnl_loc_to_bfnl_point(profiler_bestfit, tracer, zsnaps)
         overlay_markers_on_triangle(g, params, profiler_bestfit, color="C0", marker="*",
-                                    diagonal_ls="--", size=64)
+                                    label="maximum likelihood", diagonal_ls="--", size=64)
         overlay_markers_on_triangle(g, params, chain_map, color="C0", marker="o",
-                                    diagonal_ls=":", size=36)
+                                    label="MAP", diagonal_ls=":", size=36)
         overlay_truth_on_triangle(
             g,
             params,
@@ -1279,23 +1388,31 @@ def run_fit(
             linestyle="-",
         )
         overlay_truth_values_on_triangle(g, params, truth_values)
+        annotate_joint_triangle_map(g, params, [{"bestfit": profiler_bestfit, "map": chain_map}], true_fnl_loc_for_cosmo(cosmo))
         g.export(f"{prefix}_triangle.png")
         joint_output = maybe_plot_joint_triangle(tracer, zsnaps, mode, simtype, cosmo, ells=ells)
         if joint_output is not None:
             print(f"Saved {joint_output}")
+        if mode == "bfnl" and use_bphi_prior:
+            fnl_output = plot_fnl_marginalise_bphi(
+                tracer, zsnaps, use_bphi_prior=True, mode=mode,
+                simtype=simtype, cosmo=cosmo, ells=ells,
+            )
+            print(f"Saved {fnl_output}")
 
 
 def command_pk(args):
     ells = normalize_ells(args.ells)
+    abias_suffix = abias_suffix_from_args(args)
     directory = mock_dir(args.simtype)
     print(f"Using existing {args.simtype} P(k) directory: {directory}")
     for zsnap in args.zsnaps:
-        input_pk = default_pk_path(args.tracer, zsnap, cosmo=args.cosmo, simtype=args.simtype)
+        input_pk = default_pk_path(args.tracer, zsnap, cosmo=args.cosmo, simtype=args.simtype, abias_suffix=abias_suffix)
         if not input_pk.exists():
             raise FileNotFoundError(f"Expected {args.simtype} P(k) file not found: {input_pk}")
         pk_data = load_pk(
             args.tracer, zsnap, cosmo=args.cosmo, simtype=args.simtype,
-            kmin=args.kmin, kmax=args.kmax, dk=args.dk, ells=ells,
+            kmin=args.kmin, kmax=args.kmax, dk=args.dk, ells=ells, abias_suffix=abias_suffix,
         )
         print(f"Using existing {args.simtype} P(k) file {input_pk} with ells={ells}, nbins={pk_data['k'].size}")
 
@@ -1303,24 +1420,29 @@ def command_pk(args):
 def command_cov(args):
     ells = normalize_ells(args.ells)
     ensure_dir(mock_dir(args.simtype))
-    for zsnap in args.zsnaps:
+    for iz, zsnap in enumerate(args.zsnaps):
         pk_data = load_pk(
             args.tracer, zsnap, cosmo=args.cosmo, simtype=args.simtype,
             kmin=args.kmin, kmax=args.kmax, dk=args.dk, ells=ells,
         )
+        volume = volume_for_index(args.volume, args.zsnaps, iz, cov_veff=args.cov_veff)
+        if volume is not None:
+            print(f"Using covariance volume for z={zsnap:.3f}: {volume:.6e} (Mpc/h)^3")
         covariance = compute_thecov_gaussian_covariance(
             pk_data=pk_data,
             kmin=args.kmin,
             kmax=args.kmax,
             dk=args.dk,
             ells=ells,
+            volume=volume,
         )
-        output = save_covariance(args.tracer, zsnap, covariance, cosmo=args.cosmo, simtype=args.simtype, ells=ells)
+        output = save_covariance(args.tracer, zsnap, covariance, cosmo=args.cosmo, simtype=args.simtype, ells=ells, cov_veff=args.cov_veff)
         print(f"Saved covariance to {output}")
 
 
 def command_fit(args):
     ells = normalize_ells(args.ells)
+    abias_suffix = abias_suffix_from_args(args)
     run_fit(
         tracer=args.tracer,
         zsnaps=args.zsnaps,
@@ -1333,6 +1455,8 @@ def command_fit(args):
         dk=args.dk,
         ells=ells,
         run_sampler=args.run_sampler,
+        cov_veff=args.cov_veff,
+        abias_suffix=abias_suffix,
     )
 
 
@@ -1362,6 +1486,8 @@ def build_parser():
     cov_parser.add_argument("--kmax", type=float, default=0.1)
     cov_parser.add_argument("--dk", type=float, default=0.002)
     cov_parser.add_argument("--ells", nargs="+", type=int, default=[0])
+    cov_parser.add_argument("--volume", nargs="+", type=float, default=None, help="Covariance volume(s) in (Mpc/h)^3; one value or one per zsnap.")
+    cov_parser.add_argument("--cov-veff", action="store_true", help="Use DR1 n(z)-based effective volumes for covariance.")
     cov_parser.set_defaults(func=command_cov)
 
     fit_parser = subparsers.add_parser("fit", help="Run joint PNG fits with or without bphi priors.")
@@ -1376,6 +1502,8 @@ def build_parser():
     fit_parser.add_argument("--mode", default="bphi", choices=PNG_MODES)
     fit_parser.add_argument("--with-bphi-prior", action="store_true")
     fit_parser.add_argument("--run-sampler", action="store_true")
+    fit_parser.add_argument("--cov-veff", action="store_true", help="Load DR1 n(z)-based effective-volume covariance files.")
+    fit_parser.add_argument("--assembly-bias", action="store_true", help="Use assembly-bias P(k) data-vector files.")
     fit_parser.set_defaults(func=command_fit)
 
     return parser

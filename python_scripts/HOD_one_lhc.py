@@ -89,11 +89,13 @@ def main():
             
         b1_done_flag = os.path.join(outdir, f"{prefix}_b1.txt")
         skip_existing_clustering = os.path.exists(done_flag) and not args.force
-        needs_missing_b1 = args.compute_b1 and use_default_hod and not os.path.exists(b1_done_flag)
-
+        if cosmo == '000' and args.compute_b1:
+            needs_missing_b1 = args.compute_b1 and use_default_hod and not os.path.exists(b1_done_flag)
+        else:
+            needs_missing_b1 = False
+            
         if skip_existing_clustering and not needs_missing_b1:
-            print(f"Already done: {done_flag}")
-            continue
+            print(f"Already done/no need to compute b1: {done_flag}")
         if skip_existing_clustering and needs_missing_b1:
             print(f"Already done: {done_flag}; regenerating c000 mock to add missing b1.")
 
