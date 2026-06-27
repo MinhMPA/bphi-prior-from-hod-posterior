@@ -1,8 +1,109 @@
 # bphi Prior from HOD Posterior
 
-Constructing `b_phi` priors from posterior constraints on HOD parameters.
+Constructing `b_phi` priors from posterior constraints on HOD parameters, and
+using them to constrain local `fnl`.
 
-Jiaxi Yu and Nhat-Minh Nguyen (2026), arXiv:26XX.XXXXX.
+Jiaxi Yu and Nhat-Minh Nguyen (2026), arXiv:26XX.XXXXX —
+[github.com/MinhMPA/bphi-prior-from-hod-posterior](https://github.com/MinhMPA/bphi-prior-from-hod-posterior).
+
+## Overview
+
+Local primordial non-Gaussianity (PNG) imprints a scale-dependent term in the
+galaxy power spectrum proportional to `fnl * b_phi`,
+
+```text
+P_gg(k,z) = [ b_1(z) + b_phi(z) fnl / M(k,z) ]^2 P_mm(k,z) + P_shot(k,z)
+```
+
+so the uncertainty on `b_phi` is the dominant limitation when inferring `fnl`.
+This repository (i) builds DESI-like galaxy mocks by drawing HOD parameters from
+the DESI One-Percent posteriors, (ii) propagates those small-scale constraints
+into a posterior-predictive prior `P(b_phi | d_small-scale, theta_HOD)` via a
+separate-universe estimator, and (iii) feeds that prior into a local-PNG
+likelihood to constrain `fnl`. The code in `python_scripts/` is organized below
+to follow this pipeline, with each stage mapped to the corresponding section of
+`paper/main.tex`.
+
+## Code Map
+
+The pipeline runs in four stages. Each script is listed under the paper section
+it implements.
+
+### 1. Galaxy mocks from AbacusSummit + HOD — paper Sec. 3
+
+Populate Gaussian (`AbacusSummit`) and local-PNG (`AbacusSummitPNG`) halo
+catalogs with galaxies using HOD parameters sampled from the DESI 1% posteriors.
+
+| Script | Role |
+|--------|------|
+| `preproc_parallel.sh` | Preprocess `AbacusSummit` Gaussian halo catalogs (fiducial `c000`, separate-universe `c004`) into AbacusHOD inputs |
+| `preproc_parallel_PNG.sh` | Preprocess `AbacusSummitPNG` catalogs (`c000`, `c300`–`c303`) |
+| `HOD_LHC.py` | Generate Latin-hypercube HOD parameter samples spanning the posterior |
+| `HOD_one_lhc.py` (+ `HOD_one_lhc.sh`) | Populate one realization (a LHC row or the YAML default) into a mock; optionally compute real-space `P(k)` and linear bias `b_1` |
+| `bphi_prior_HOD.py` | Run HOD over the full LHC sample set (the posterior-predictive mock ensemble) |
+| `HOD_utils.py` | Shared utilities: catalog population (`compute_all`), `wp`/multipoles, real-space `P(k)`, `b_1` estimation, and triangle/contour plotting |
+| `AbacusHOD_test.py` | Validation of the AbacusHOD population path |
+| `AbacusHOD.sh`, `HOD_separate_universe.sh` | Orchestration launchers documenting the mock-building sequence |
+
+### 2. `b_phi` estimation and prior construction — paper Sec. 2
+
+Estimate `b_phi` and its scatter at fixed small-scale constraints, yielding the
+HOD-informed prior. Two independent estimators are provided as a cross-check.
+
+| Script | Role |
+|--------|------|
+| `HOD_bphi.py` (+ `HOD_bphi.sh`) | Separate-universe estimator: SU mode (`c000` vs `c004`) or PNG mode (`c000` vs a PNG cosmology) |
+| `bphi_dz.py` | Abundance/growth-derivative estimator, `b_phi ~ 2 (dln n / dz) / (dln sigma_8 / dz)`, the universality-relation form |
+| `bphi_report.py` | Mean and error bars of the `b_phi` posterior-predictive |
+| `bphi_plot.py` | Plot `b_phi` distributions |
+
+### 3. Local `fnl` inference — paper Sec. 4–5
+
+Validate the data vector and covariance, then run the joint redshift-space
+multipole (`P_0`, `P_2`) PNG fit. The sampling **mode** selects the benchmark
+scenario (see below).
+
+| Script | Role |
+|--------|------|
+| `bphi_prior_pipeline.py` (+ `bphi_prior_pipeline.sh`) | **Production pipeline.** Subcommands `pk` (validate external `P(k)`), `cov` (Gaussian covariance via `thecov`), `fit` (joint `P_0`+`P_2` PNG fit). Modes `bphi`/`b-p`/`bfnl`; multipoles selected with `--ells 0 2` |
+| `bphi_prior_pipeline_bfnl.py` (+ `bphi_prior_pipeline_bfnl.sh`) | Earlier monopole-only variant focused on the `bfnl` baseline (`bphi`/`bfnl` modes only, no `--ells` routing) |
+
+### 4. Validation, diagnostics, and plots — paper Sec. 5
+
+| Script | Role |
+|--------|------|
+| `bphi_prior_plot_pk.py` | Plot `P(k)` and compare its variance against `baocov.pk_var` |
+| `test_png_bias_krange.py` | PNG scale-dependent-bias `k`-range diagnostic from real-space `P(k)` |
+| `lowS8_HOD.py`, `AbacusHOD_lowS8.py`, `lowS8_comparison.py` (+ `bphi_HOD.sh`) | Low-`S8` cross-check: tune and create low-`S8` Abacus mocks, then recompute bias and `b_phi` for comparison |
+
+## Benchmark Scenarios
+
+The paper notation for the product amplitude is `B_i = b_{phi,i} fnl_loc`. In
+code and desilike configs this product is named `bfnl_z` or `bfnl_loc`. The
+pipeline `--mode` flag selects the scenario:
+
+| `--mode` | Scenario | Description |
+|----------|----------|-------------|
+| `bfnl` | **A — bfnl baseline** | Sample one product amplitude `B_i = b_{phi,i} fnl_loc` per independent tracer/redshift bin; no `bphi_i` prior, no universal `fnl_loc` |
+| `bphi` | **B — HOD-informed Gaussian `bphi` prior** | Infer one universal `fnl_loc` using a Gaussian HOD prior `pi_i(beta_i) = Normal(beta_i; mu_bphi_i, sigma_bphi_i^2)` per `bphi_i`. Validate B-direct (`mode="bphi"`) against the B-marginal custom likelihood before promoting either |
+| `b-p` | **C — fixed-`p` universality** | Fix `bphi_i = 2 delta_c (b1_i - p_i)` with tracer/sample-specific `p_i` for LRG/ELG/QSO, then infer one universal `fnl_loc` |
+
+## Marginal Likelihood for `fnl`
+
+The marginalized Scenario B likelihood follows the appendix formalism in
+`paper/main.tex` (Sec. "Marginal likelihood for fnl"):
+
+```text
+L_i^marg(f) = integral d beta_i L_i(B_i = f beta_i) pi_i(beta_i)
+P(f | all data) proportional to pi(f) product_i L_i^marg(f)
+```
+
+If both the product-amplitude likelihood `L_i(B_i)` and the HOD-informed
+`bphi_i` prior are Gaussian, the marginal likelihood is analytic and uses only
+`Bhat_i`, `sigma_B_i`, `mu_bphi_i`, and `sigma_bphi_i`. Gauss-Hermite quadrature
+is only needed when the `bphi_i` prior is Gaussian but `L_i(B_i)` is kept as a
+numerical 1D likelihood. Non-Gaussian `bphi_i` priors use their own
+tabulated-grid or weighted-sample integration weights.
 
 ## Analysis Contract
 
@@ -18,7 +119,8 @@ for each tracer/redshift sample. The monopole (`ell=0`) and quadrupole
 `thecov`. The quadrupole is part of the production data vector, not a
 diagnostic-only quantity.
 
-The HOD catalog-space convention is:
+The HOD catalog-space conventions (correctness-critical — violating them double
+shifts the catalog) are:
 
 - AbacusHOD LRG catalogs generated with `want_rsd: True` are already shifted to
   redshift space by AbacusHOD. Downstream clustering or power-spectrum code must
@@ -37,35 +139,25 @@ The HOD catalog-space convention is:
   benchmarks are promoted to production validation, audit whether HODDIES has
   already applied RSD so the pipeline does not double shift the catalog.
 
-## Benchmark Scenarios
+## Typical Workflow
 
-The paper notation for the product amplitude is
-`B_i = b_{\phi,i} fnl_loc`. In code and desilike configs this same
-data-constrained product is usually named `bfnl_z` or `bfnl_loc`.
+```bash
+# 1. Preprocess halo catalogs (Gaussian + PNG), then build HOD mocks
+sbatch preproc_parallel.sh 000        # and 004
+sbatch preproc_parallel_PNG.sh 0      # SLURM array over PNG cosmologies
+python HOD_LHC.py LRG                  # Latin-hypercube HOD samples
+sbatch HOD_one_lhc.sh LRG SU           # populate realizations (SU or PNG)
 
-- **Scenario A, bfnl baseline:** sample one product amplitude
-  `B_i = b_{\phi,i} fnl_loc` per independent tracer/redshift bin in desilike
-  `mode="bfnl"`, with no `bphi_i` prior and no universal sampled `fnl_loc`.
-- **Scenario B, HOD-informed Gaussian bphi prior:** infer one universal
-  `fnl_loc` using one Gaussian HOD prior
-  `pi_i(beta_i) = Normal(beta_i; mu_bphi_i, sigma_bphi_i^2)` for each
-  `bphi_i`. Validate both B-direct (`mode="bphi"` sampling) and B-marginal
-  (custom marginal likelihood) before choosing the official implementation.
-- **Scenario C, fixed-p universality:** fix
-  `bphi_i = 2 delta_c (b1_i - p_i)` using tracer/sample-specific fixed `p_i`
-  values for LRG, ELG, and QSO, then infer one universal `fnl_loc`.
+# 2. Estimate b_phi and its prior
+python HOD_bphi.py LRG --mode PNG --cosmo 300
 
-The marginalized Scenario B likelihood follows the appendix formalism in
-`paper/main.tex`:
+# 3. Validate inputs, then run the joint P0+P2 fit (Scenario B shown)
+python bphi_prior_pipeline.py cov --simtype PNG --ells 0 2 --cov-veff
+python bphi_prior_pipeline.py fit --simtype PNG --ells 0 2 --mode bphi --with-bphi-prior --run-sampler
 
-```text
-L_i^marg(f) = integral d beta_i L_i(B_i = f beta_i) pi_i(beta_i)
-P(f | all data) proportional to pi(f) product_i L_i^marg(f)
+# Convenience launcher (mode = bfnl | bphi | b-p)
+bash bphi_prior_pipeline.sh bphi
 ```
 
-If both the product-amplitude likelihood `L_i(B_i)` and the HOD-informed
-`bphi_i` prior are Gaussian, the marginal likelihood is analytic and uses only
-`Bhat_i`, `sigma_B_i`, `mu_bphi_i`, and `sigma_bphi_i`. Gauss-Hermite
-quadrature is only needed when the `bphi_i` prior is Gaussian but `L_i(B_i)` is
-kept as a numerical one-dimensional likelihood. Non-Gaussian `bphi_i` priors use
-their own tabulated-grid or weighted-sample integration weights.
+Compute environment is the DESI `cosmodesi` stack on NERSC; the `.sh` launchers
+source it and wrap each step in the appropriate `srun`/`sbatch` allocation.
