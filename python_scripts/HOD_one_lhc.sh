@@ -4,28 +4,27 @@
 #SBATCH -n 1
 #SBATCH -c 32
 #SBATCH --mem=120G
-#SBATCH -t 01:00:00
+#SBATCH -t 00:30:00
 #SBATCH --qos=regular
 #SBATCH --account=desi
-#SBATCH --array=0-100
+#SBATCH --array=2-100
 #SBATCH -J lhc_abacushod
 #SBATCH -o logs/%x_%A_%a.out
 #SBATCH -e logs/%x_%A_%a.err
 
 source /global/common/software/desi/users/adematti/cosmodesi_environment.sh main
 
-set -euo pipefail
-
 cd $SCRATCH/b_phi
 mkdir -p logs
  
 # -------- inputs ----------
-tracer=LRG
-HOD_ID=$1 #${SLURM_ARRAY_TASK_ID} #
-SIMTYPE=$2 # SU/PNG
+tracer=${1:-LRG} #LRG
+HOD_ID=${SLURM_ARRAY_TASK_ID} #$1 ${SLURM_ARRAY_TASK_ID} # if 0, the data vector of bphi_prior_pipeline.py will be provided
+SIMTYPE=${2:-SU} # SU/PNG
 USE_ASSEMBLY_BIAS=${3:-0}
 COMPUTE_B1=${4:-1}
 
+# confirmed that thw abacusHOD implementation has been corrected
 ABIAS_ARGS=()
 if [[ "${USE_ASSEMBLY_BIAS}" == "1" || "${USE_ASSEMBLY_BIAS}" == "true" || "${USE_ASSEMBLY_BIAS}" == "yes" ]]; then
     ABIAS_ARGS=(--Bcent -0.04 --Bsat -0.17)
@@ -44,9 +43,9 @@ export NUMEXPR_NUM_THREADS=1
 
 # information: redshift bin
 if [ "$tracer" = "LRG" ]; then
-    zmins=(0.8) # (0.4 0.6 0.8) # 0.8)
+    zmins=(0.8) #(0.4 0.6 0.8) # 0.8)
     zmaxs=(1.1) #(0.6 0.8 1.1) # 1.1)
-    zsnaps=(0.95) # (0.5 0.8 1.1) # 0.95)
+    zsnaps=(1.1) #(0.5 0.8 1.1) # 0.95)
 elif [ "$tracer" = "ELG" ]; then
     zmins=(0.8 1.1)
     zmaxs=(1.1 1.6)
@@ -56,7 +55,7 @@ elif [ "$tracer" = "ELG" ]; then
 fi
 # 
 
-calculator="srun -N 1 -n 1 -c 32 -C cpu --mem=120G --qos shared_interactive --account desi" #-t 02:00:00
+calculator="srun -N 1 -n 1 -c 32 -C cpu" # --mem=120G --qos shared_interactive --account desi -t 02:00:00"
 for i in "${!zmins[@]}"; do
     zmin=${zmins[$i]}
     zmax=${zmaxs[$i]}

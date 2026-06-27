@@ -328,14 +328,25 @@ def annotate_joint_triangle_map(g, params, entries, true_fnl_loc):
     if axes.size == 0:
         return
     fig = axes.flat[0].figure
-    fig.text(
-        0.02,
-        0.02,
-        "Star: maximum likelihood. Circle: MAP. Black lines: true fNL and best-fit b1.",
-        ha="left",
-        va="bottom",
-        fontsize=9,
-    )
+    handles, labels = [], []
+    for ax in axes.flat:
+        if ax is None:
+            continue
+        ax_handles, ax_labels = ax.get_legend_handles_labels()
+        for handle, label in zip(ax_handles, ax_labels):
+            if label and not label.startswith("_") and label not in labels:
+                handles.append(handle)
+                labels.append(label)
+
+    if handles:
+        fig.legend(
+            handles,
+            labels,
+            loc="upper right",
+            bbox_to_anchor=(0.98, 0.93),
+            frameon=False,
+            fontsize=9,
+        )
 
 
 def overlay_markers_on_triangle(g, params, point, color, marker, label=None, diagonal_ls="--", size=48):

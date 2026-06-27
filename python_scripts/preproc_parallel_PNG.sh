@@ -22,7 +22,7 @@ conda activate abacushod
 # Map array index to (i, snap)
 NSNAPS=4
 SNAPS=(0.500 0.800 0.950 1.100)
-cosmos=(000 300 301 302 303)
+cosmos=(000 300 301) # 302 303)
 
 if [ -n "${SLURM_ARRAY_TASK_ID:-}" ]; then
   calculator="srun -N 1 -n 1 -c 32 -C cpu --mem=200G --account desi "
@@ -34,7 +34,8 @@ if [ -n "${SLURM_ARRAY_TASK_ID:-}" ]; then
   SIMNAME="Abacus_pngbase_c${cosmo}_ph000"
   BASECFG="${dir_source}/HOD_config/abacushod_z${snap}_c000.yaml"
   NEWCFG="${dir_source}/HOD_config/tmp/abacushod_png_c${cosmo}_ph000_z${snap}.yaml"
-  TARGET="${dir_source}/tests/${SIMNAME}/z${snap}/halos_xcom_16_seed600_abacushod_oldfenv_new.h5"
+  #TARGET="${dir_source}/tests/${SIMNAME}/z${snap}/halos_xcom_16_seed600_abacushod_oldfenv_new.h5"
+  TARGET="${dir_source}/tests/${SIMNAME}/z${snap}/env_xcom_16_abacushod_localenv_new.h5"
 
   if [ -f "$NEWCFGT" ]; then
     echo "YAML File exists — skipping."
@@ -53,7 +54,7 @@ if [ -n "${SLURM_ARRAY_TASK_ID:-}" ]; then
   ${calculator} python -m abacusnbody.hod.prepare_sim --path2config "$NEWCFG"
 else
   #for i in {0..4}; do
-    calculator="srun -N 1 -n 1 -c 32 -C cpu --mem=200G -t 04:00:00 --qos interactive --account desi "
+    calculator="srun -N 1 -n 1 -c 32 -C cpu --mem=200G -t 04:00:00 --qos shared_interactive --account desi "
     cosmo=${cosmos[$i]}
     SIMNAME="Abacus_pngbase_c${cosmo}_ph000"
 
@@ -61,6 +62,7 @@ else
       BASECFG="${dir_source}/HOD_config/abacushod_z${snap}_c000.yaml"
       NEWCFG="${dir_source}/HOD_config/tmp/abacushod_png_c${cosmo}_ph000_z${snap}.yaml"
       TARGET="${dir_source}/tests/${SIMNAME}/z${snap}/halos_xcom_16_seed600_abacushod_oldfenv_new.h5"
+      TARGET="${dir_source}/tests/${SIMNAME}/z${snap}/env_xcom_16_abacushod_localenv_new.h5"
 
       if [ -f "$NEWCFG" ]; then
         echo "YAML File exists — skipping."

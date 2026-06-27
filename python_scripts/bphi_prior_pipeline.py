@@ -11,6 +11,7 @@ from HOD_utils import (
     overlay_markers_on_triangle,
     overlay_truth_on_triangle,
     overlay_truth_values_on_triangle,
+    plot_contours,
     triangle_params_with_bfnl_loc,
 )
 
@@ -21,13 +22,13 @@ MOCK_DIRS = {
     "SU": ROOT / "mocks_lhc_SU",
     "PNG": ROOT / "mocks_lhc_PNG",
 }
-PNG_MOCK_DIR = MOCK_DIRS["PNG"]
 BPHI_STATS_FILE = ROOT / "backup" / "bphi_AbacusHOD_LRG.txt"
 BPHI_STATS_UPDATE_FILES = (ROOT / "backup" / "bphi_AbacusHOD_z1.1_updated.txt",)
+BPHI_STATS_ASSEMBLY_FILE = ROOT / "bphi_results_abacushod_Bcentm0p040_Bsatm0p170.txt"
 BPHI_BESTFIT_B1_FILE = ROOT / "bphi_true_value_PNGmock_fit" / "b1_with-sn0.txt"
 BPHI_SU_DENOM = np.log(0.807952 / 0.75)
+BPHI_NGAL_MIN = 100000
 BOXSIZE = 2000.0
-DEFAULT_NTHREAD = 32
 DEFAULT_ZS = [0.5, 0.8, 1.1]
 ASSEMBLY_BIAS_SUFFIX = "_Bcentm0p040_Bsatm0p170"
 COV_VEFF_P0 = 10000.0
@@ -79,6 +80,17 @@ def zset_tag(zsnaps):
     return "-".join(ztag(zsnap).replace(".", "p") for zsnap in zsnaps)
 
 
+def ktag(k):
+    return f"{float(k):.3f}".replace("-", "m").replace(".", "p")
+
+
+def k_range_tag(kmin=None, kmax=None):
+    if kmax is None or np.isclose(float(kmax), 0.1):
+        return ""
+    kmin = 0.0 if kmin is None else float(kmin)
+    return f"_k{ktag(kmin)}-{ktag(kmax)}"
+
+
 def normalize_ells(ells):
     if ells is None:
         return (0,)
@@ -98,10 +110,6 @@ def abias_suffix_from_args(args):
     return ASSEMBLY_BIAS_SUFFIX if getattr(args, "assembly_bias", False) else ""
 
 
-def default_config_path(zsnap, cosmo="000"):
-    return ROOT / "HOD_config" / f"abacushod_z{ztag(zsnap)}_c{cosmo}.yaml"
-
-
 def mock_dir(simtype):
     if simtype not in MOCK_DIRS:
         raise ValueError(f"Unknown simtype '{simtype}'. Choices are {SIMTYPES}.")
@@ -110,9 +118,6 @@ def mock_dir(simtype):
 
 def mock_pk_path(tracer, zsnap, cosmo="000", simtype="SU", abias_suffix=""):
     return mock_dir(simtype) / f"{tracer}_z{ztag(zsnap)}_c{cosmo}_default{abias_suffix}_pk_RSD.npy"
-
-def png_mock_b1_path(tracer, zsnap, cosmo="000"):
-    return PNG_MOCK_DIR / f"{tracer}_z{ztag(zsnap)}_c{cosmo}_default_b1.txt"
 
 
 def load_bestfit_b1(zsnap, path=BPHI_BESTFIT_B1_FILE):
@@ -130,61 +135,6 @@ def default_pk_path(tracer, zsnap, cosmo="000", simtype="SU", abias_suffix=""):
 def default_cov_path(tracer, zsnap, cosmo="000", simtype="SU", ells=(0,), cov_veff=False):
     veff_tag = "_veff" if cov_veff else ""
     return mock_dir(simtype) / f"{tracer}_z{ztag(zsnap)}_c{cosmo}_default_cov{ell_tag(ells)}{veff_tag}_RSD.npy"
-
-
-def load_yaml(path):
-    import yaml
-
-    with open(path, "r", encoding="utf-8") as stream:
-        return yaml.safe_load(stream)
-
-
-def load_abacushod(tracer, zsnap, cosmo="000", nthread=DEFAULT_NTHREAD):
-    from abacusnbody.hod.abacus_hod import AbacusHOD
-
-    config = load_yaml(default_config_path(zsnap, cosmo=cosmo))
-    sim_params = config.get("sim_params", {})
-    hod_params = config.get("HOD_params", {})
-    clustering_params = config.get("clustering_params", {})
-    tracer_flags = hod_params.setdefault("tracer_flags", {})
-    tracer_flags["LRG"] = tracer == "LRG"
-    tracer_flags["ELG"] = tracer == "ELG"
-    tracer_flags["QSO"] = tracer == "QSO"
-    hod_params["want_rsd"] = True
-    ball = AbacusHOD(sim_params, hod_params, clustering_params)
-    mock = ball.run_hod(
-        tracers=ball.tracers,
-        want_rsd=ball.want_rsd,
-        Nthread=int(config.get("nthread", nthread)),
-        verbose=True,
-        write_to_disk=False,
-    )
-    return mock
-
-
-def compute_pk_from_mock(mock, tracer, kmin=0.0, kmax=0.1, dk=0.002, nmesh=256):
-    from pypower import CatalogFFTPower
-
-    data_positions = np.array(
-        [
-            mock[tracer]["x"] % BOXSIZE,
-            mock[tracer]["y"] % BOXSIZE,
-            mock[tracer]["z"] % BOXSIZE,
-        ]
-    ).T
-    result = CatalogFFTPower(
-        data_positions1=data_positions,
-        position_type="pos",
-        resampler="tsc",
-        interlacing=3,
-        edges={"min": kmin, "max": kmax, "step": dk},
-        boxsize=BOXSIZE,
-        nmesh=nmesh,
-        ells=(0,),
-        los="z",
-        mpiroot=0,
-    )
-    return result
 
 
 def load_png_rebinned_pk(path, kmin=0.0, kmax=0.1, dk=0.002, ells=(0,)):
@@ -428,10 +378,10 @@ def volume_for_index(volumes, zsnaps, index, cov_veff=False):
     return float(volumes[index])
 
 
-def fit_prefix(tracer, zsnaps, mode, simtype, cosmo, use_bphi_prior, ells=(0,)):
-    prior_tag = "with_bphi_prior" if use_bphi_prior else "no_bphi_prior"
+def fit_prefix(tracer, zsnaps, mode, simtype, cosmo, use_bphi_prior, ells=(0,), abias_suffix="", kmin=None, kmax=None, bphi_prior_ab=False):
+    prior_tag = "with_bphi_prior_AB" if bphi_prior_ab else ("with_bphi_prior" if use_bphi_prior else "no_bphi_prior")
     ztag_set = zset_tag(zsnaps)
-    return FIT_DIR / f"png_fit_{simtype}_{tracer}_z{ztag_set}_c{cosmo}_{mode}{ell_tag(ells)}_{prior_tag}"
+    return FIT_DIR / f"png_fit_{simtype}_{tracer}_z{ztag_set}_c{cosmo}_{mode}{ell_tag(ells)}{abias_suffix}{k_range_tag(kmin, kmax)}_{prior_tag}"
 
 
 def flat_prior_abs(name):
@@ -494,15 +444,6 @@ def find_param_key(params, basename):
         if name == basename or getattr(param, "basename", None) == basename:
             return name
     return None
-
-
-def point_param_value(point, params, basename):
-    if point is None:
-        return None
-    key = find_param_key(params, basename)
-    if key is None:
-        return None
-    return scalar_float(point.get(key))
 
 
 def bfnl_loc_name_from_bphi_name(name):
@@ -660,7 +601,7 @@ def single_triangle_chain_selection(cosmo, use_bphi_prior):
     )
 
 
-def maybe_plot_joint_triangle(tracer, zsnaps, mode, simtype, cosmo, ells=(0,)):
+def maybe_plot_joint_triangle(tracer, zsnaps, mode, simtype, cosmo, ells=(0,), abias_suffix="", kmin=None, kmax=None):
     from desilike.samples import Chain, Profiles, plotting
 
     ells = normalize_ells(ells)
@@ -670,7 +611,10 @@ def maybe_plot_joint_triangle(tracer, zsnaps, mode, simtype, cosmo, ells=(0,)):
         (False, "C1", "--", "No bphi prior"),
         (True, "C0", "-", "With bphi prior"),
     ]:
-        prefix = fit_prefix(tracer, zsnaps, mode, simtype, cosmo, use_bphi_prior, ells=ells)
+        prefix = fit_prefix(
+            tracer, zsnaps, mode, simtype, cosmo, use_bphi_prior,
+            ells=ells, abias_suffix=abias_suffix, kmin=kmin, kmax=kmax,
+        )
         chain_fn = Path(f"{prefix}_chain.npy")
         if not chain_fn.exists():
             continue
@@ -757,107 +701,28 @@ def maybe_plot_joint_triangle(tracer, zsnaps, mode, simtype, cosmo, ells=(0,)):
     overlay_truth_values_on_triangle(g, params, truth_values)
     annotate_joint_triangle_map(g, params, entries, true_fnl_loc)
 
-    output = FIT_DIR / f"png_fit_{simtype}_{tracer}_z{zset_tag(zsnaps)}_c{cosmo}_{mode}{ell_tag(ells)}_joint_triangle.png"
+    output = FIT_DIR / f"png_fit_{simtype}_{tracer}_z{zset_tag(zsnaps)}_c{cosmo}_{mode}{ell_tag(ells)}{abias_suffix}{k_range_tag(kmin, kmax)}_joint_triangle.png"
     g.export(str(output))
     return output
 
-def fnl_marginalise_bphi(
-    tracer,
-    zsnaps,
-    use_bphi_prior=True,
-    mode="bfnl",
-    simtype="SU",
-    cosmo="000",
-    ells=(0,),
-):
-    from desilike.samples import Chain
+def parse_zsnaps_text(text, default=None):
+    if text is None:
+        return list(default if default is not None else DEFAULT_ZS)
+    if isinstance(text, (list, tuple)):
+        text = ",".join(str(item) for item in text)
+    return [float(item) for item in str(text).replace(",", " ").split()]
 
-    prefix = fit_prefix(tracer, zsnaps, mode, simtype, cosmo, use_bphi_prior, ells=ells)
-    chain_fn = Path(f"{prefix}_chain.npy")
-    burnin, thin = single_triangle_chain_selection(cosmo, use_bphi_prior)
 
-    chain = Chain.load(chain_fn).remove_burnin(burnin)[::thin]
-    stats = load_bphi_stats()
-    names = [f"{tracer_z_label(tracer, z)}.bfnl_loc" for z in zsnaps]
-    mu = np.array([stats[(tracer, z)]["mean"] for z in zsnaps])
-    sig = np.array([stats[(tracer, z)]["std"] for z in zsnaps])
-    bfnl = np.vstack([np.ravel(np.asarray(chain[name])) for name in names]).T
+def _broadcast_plot_arg(values, nitems, default, name):
+    if values is None:
+        return [default] * nitems
+    values = list(values)
+    if len(values) == 1 and nitems > 1:
+        return values * nitems
+    if len(values) != nitems:
+        raise ValueError(f"{name} must have one value or {nitems} values.")
+    return values
 
-    F = flat_prior_abs("fnl_loc")
-    ngrid = int(os.environ.get("BPHI_BFNL_PRIOR_NGRID", BPHI_BFNL_PRIOR_NGRID))
-    if ngrid % 2:
-        ngrid += 1
-    edges = np.linspace(-F, F, ngrid + 1)
-    fgrid = 0.5 * (edges[1:] + edges[:-1])   # avoids exactly zero
-
-    fnl_samples = []
-    rng = np.random.default_rng(42)
-
-    for beta in bfnl:
-        bphi = beta[:, None] / fgrid[None, :]
-        logp = np.sum(-0.5 * ((bphi - mu[:, None]) / sig[:, None])**2
-                    - np.log(sig[:, None])
-                    - np.log(np.abs(fgrid))[None, :], axis=0)
-        p = np.exp(logp - logsumexp(logp))
-        fnl_samples.append(rng.choice(fgrid, p=p / p.sum()))
-
-    fnl_samples = np.array(fnl_samples)
-    print(np.percentile(fnl_samples, [16, 50, 84]))
-    return fnl_samples
-
-def plot_fnl_marginalise_bphi(
-    tracer,
-    zsnaps,
-    use_bphi_prior=True,
-    mode="bfnl",
-    simtype="SU",
-    cosmo="000",
-    ells=(0,),
-    compare=None,
-    bins=80,
-):
-    import matplotlib.pyplot as plt
-    from desilike.samples import Chain
-
-    fnl_samples = fnl_marginalise_bphi(
-        tracer, zsnaps, use_bphi_prior=use_bphi_prior, mode=mode,
-        simtype=simtype, cosmo=cosmo, ells=ells,
-    )
-    if compare is None:
-        compare = [
-            ("bphi", False, "bphi, no prior"),
-            ("bphi", True, "bphi, with prior"),
-        ]
-
-    fig, ax = plt.subplots(figsize=(6, 4))
-    ax.hist(fnl_samples, bins=bins, density=True, histtype="step", linewidth=1.8,
-            label="bfnl + p(fnl | bfnl)")
-
-    for compare_mode, compare_prior, label in compare:
-        prefix = fit_prefix(tracer, zsnaps, compare_mode, simtype, cosmo, compare_prior, ells=ells)
-        chain_fn = Path(f"{prefix}_chain.npy")
-        if not chain_fn.exists():
-            continue
-        burnin, thin = single_triangle_chain_selection(cosmo, compare_prior)
-        chain = Chain.load(chain_fn).remove_burnin(burnin)[::thin]
-        fnl_key = find_param_key(chain.params(), "fnl_loc")
-        if fnl_key is None:
-            continue
-        ax.hist(np.ravel(np.asarray(chain[fnl_key])), bins=bins, density=True,
-                histtype="step", linewidth=1.3, label=label)
-
-    true_fnl = true_fnl_loc_for_cosmo(cosmo)
-    if true_fnl is not None:
-        ax.axvline(true_fnl, color="black", linestyle="--", linewidth=1.0, label="truth")
-    ax.set_xlabel(r"$f_{\mathrm{NL}}^{\mathrm{loc}}$")
-    ax.set_ylabel("posterior density")
-    ax.legend(frameon=False)
-
-    prefix = fit_prefix(tracer, zsnaps, mode, simtype, cosmo, use_bphi_prior, ells=ells)
-    output = Path(f"{prefix}_fnl_marginalise_bphi_1d.png")
-    fig.savefig(output, dpi=200, bbox_inches="tight")
-    plt.close(fig)
-    return output
 
 def load_bphi_stats(path=BPHI_STATS_FILE, update_paths=BPHI_STATS_UPDATE_FILES):
     stats = {}
@@ -934,6 +799,45 @@ def load_bphi_stats(path=BPHI_STATS_FILE, update_paths=BPHI_STATS_UPDATE_FILES):
             item["b1_n"] = int(b1.size)
         summary[key] = item
     return summary
+
+
+def load_assembly_bias_bphi_prior(path=BPHI_STATS_ASSEMBLY_FILE, tracer="LRG", zsnap=1.1):
+    counts = {}
+    with open(path, "r", encoding="utf-8") as stream:
+        for line in stream:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split()
+            if len(parts) < 5:
+                continue
+            tracer_i, zsnap_i, cosmo, hod_id, ngal = parts[:5]
+            if tracer_i != tracer or not np.isclose(float(zsnap_i), float(zsnap)):
+                continue
+            counts.setdefault(int(hod_id), {})[cosmo] = float(ngal)
+
+    bphi = []
+    invalid = []
+    for hod_id in range(0, 101):
+        item = counts.get(hod_id, {})
+        ngal_000 = item.get("000")
+        ngal_004 = item.get("004")
+        if ngal_000 is None or ngal_004 is None or ngal_000 <= BPHI_NGAL_MIN or ngal_004 <= BPHI_NGAL_MIN:
+            invalid.append(hod_id)
+            continue
+        bphi.append(2.0 * np.log(ngal_000 / ngal_004) / BPHI_SU_DENOM)
+
+    if not bphi:
+        raise ValueError(f"No valid assembly-bias bphi realizations found in {path}.")
+    bphi = np.asarray(bphi, dtype="f8")
+    return {
+        "mean": float(np.mean(bphi)),
+        "std": float(np.std(bphi)),
+        "n": int(bphi.size),
+        "invalid_hod_ids": invalid,
+        "path": Path(path),
+    }
+
 
 def load_png_mock_b1(tracer, zsnap, cosmo="000", b1_cosmo="000"):
     path = BPHI_BESTFIT_B1_FILE
@@ -1159,6 +1063,7 @@ def build_joint_png_likelihood(
     ells=(0,),
     cov_veff=False,
     abias_suffix="",
+    bphi_prior_ab=False,
 ):
     from desilike.likelihoods import ObservablesGaussianLikelihood
     from desilike.observables.galaxy_clustering import TracerPowerSpectrumMultipolesObservable
@@ -1166,6 +1071,11 @@ def build_joint_png_likelihood(
 
     if use_bphi_prior and mode == "b-p":
         raise ValueError("bphi priors can only be applied when mode='bphi' or 'bfnl'.")
+    if bphi_prior_ab:
+        if not use_bphi_prior:
+            raise ValueError("--bphi-prior-ab requires --with-bphi-prior.")
+        if len(zsnaps) != 1 or not np.isclose(float(zsnaps[0]), 1.1):
+            raise ValueError("WARNING: assembly bias bphi prior not ready for this setting; use --zsnaps 1.1 only.")
     ells = normalize_ells(ells)
     likelihood_kmin = max(kmin, fundamental_k())
 
@@ -1175,6 +1085,14 @@ def build_joint_png_likelihood(
     observables = []
     covariance_blocks = []
     bphi_stats = load_bphi_stats()
+    if bphi_prior_ab:
+        ab_summary = load_assembly_bias_bphi_prior(tracer=tracer, zsnap=1.1)
+        bphi_stats[(tracer, 1.1)] = ab_summary
+        print(
+            f"Using assembly-bias bphi prior for {tracer} z=1.100: "
+            f"mean={ab_summary['mean']:.8f}, std={ab_summary['std']:.8f}, "
+            f"n={ab_summary['n']} from {ab_summary['path']}"
+        )
     bfnl_prior_param_names = []
     bfnl_prior_locs = []
     bfnl_prior_scales = []
@@ -1285,7 +1203,14 @@ def run_fit(
     run_sampler=False,
     cov_veff=False,
     abias_suffix="",
+    bphi_prior_ab=False,
 ):
+    if bphi_prior_ab:
+        if not use_bphi_prior:
+            raise ValueError("--bphi-prior-ab requires --with-bphi-prior.")
+        if len(zsnaps) != 1 or not np.isclose(float(zsnaps[0]), 1.1):
+            raise ValueError("WARNING: assembly bias bphi prior not ready for this setting; use --zsnaps 1.1 only.")
+
     # Respect user environment/PYTHONPATH by default.
     # Only override desilike import path when DESILIKE_LOCAL_PATH is explicitly set.
     local_desilike = os.environ.get("DESILIKE_LOCAL_PATH")
@@ -1300,6 +1225,7 @@ def run_fit(
 
     from desilike import setup_logging
     from desilike.profilers import MinuitProfiler
+    from desilike.samples import Profiles
 
     setup_logging("info")
     likelihood, observables = build_joint_png_likelihood(
@@ -1315,14 +1241,34 @@ def run_fit(
         ells=ells,
         cov_veff=cov_veff,
         abias_suffix=abias_suffix,
+        bphi_prior_ab=bphi_prior_ab,
     )
 
     ensure_dir(FIT_DIR)
-    prefix = fit_prefix(tracer, zsnaps, mode, simtype, cosmo, use_bphi_prior, ells=ells)
+    prefix = fit_prefix(
+        tracer, zsnaps, mode, simtype, cosmo, use_bphi_prior,
+        ells=ells, abias_suffix=abias_suffix, kmin=kmin, kmax=kmax, bphi_prior_ab=bphi_prior_ab,
+    )
 
-    profiler = MinuitProfiler(likelihood, seed=42, save_fn=f"{prefix}_profiles.npy")
-    profiles = profiler.maximize(niterations=1)
-    profiles = profiler.profiles if profiles is None else profiles
+    profiles_fn = Path(f"{prefix}_profiles.npy")
+    if profiles_fn.exists():
+        profiles = Profiles.load(profiles_fn)
+    else:
+        profiler = MinuitProfiler(likelihood, seed=42, save_fn=str(profiles_fn))
+        profiles = profiler.maximize(niterations=1)
+        profiles = profiler.profiles if profiles is None else profiles
+
+        fnl_grid = np.linspace(-flat_prior_abs("fnl_loc"), flat_prior_abs("fnl_loc"), 121)
+        if mode == "bphi":
+            fnl_params = [str(param) for param in profiler.varied_params if getattr(param, "basename", None) == "fnl_loc"]
+            if fnl_params:
+                profiles = profiler.profile(params=fnl_params, grid=[fnl_grid] * len(fnl_params)) or profiler.profiles
+        elif mode == "bfnl":
+            bfnl_grid = np.linspace(-bfnl_flat_limit(), bfnl_flat_limit(), 121)
+            bfnl_params = [str(param) for param in profiler.varied_params if getattr(param, "basename", None) == "bfnl_loc"]
+            if bfnl_params:
+                profiles = profiler.profile(params=bfnl_params, grid=[bfnl_grid] * len(bfnl_params)) or profiler.profiles
+        profiles.to_stats(tablefmt="pretty", fn=f"{prefix}_profiler_stats.txt")
     profiler_bestfit = profiles.bestfit.choice(input=True)
     likelihood(**profiler_bestfit)
     profiler_bestfit_point = point_to_float_dict(profiler_bestfit)
@@ -1333,29 +1279,21 @@ def run_fit(
     for zsnap, observable in zip(zsnaps, observables):
         observable.plot(fn=f"{prefix}_z{ztag(zsnap)}_bestfit.png")
 
-    fnl_grid = np.linspace(-flat_prior_abs("fnl_loc"), flat_prior_abs("fnl_loc"), 121)
-    if mode == "bphi":
-        fnl_params = [str(param) for param in profiler.varied_params if getattr(param, "basename", None) == "fnl_loc"]
-        if fnl_params:
-            profiles = profiler.profile(params=fnl_params, grid=[fnl_grid] * len(fnl_params))
-    elif mode == "bfnl":
-        bfnl_grid = np.linspace(-bfnl_flat_limit(), bfnl_flat_limit(), 121)
-        bfnl_params = [str(param) for param in profiler.varied_params if getattr(param, "basename", None) == "bfnl_loc"]
-        if bfnl_params:
-            profiles = profiler.profile(params=bfnl_params, grid=[bfnl_grid] * len(bfnl_params))
-    profiles.to_stats(tablefmt="pretty", fn=f"{prefix}_profiler_stats.txt")
-
     if run_sampler:
+        print("Preparing sampler...", flush=True)
         from desilike.samplers import ZeusSampler
-        from desilike.samples import Chain, plotting
+        from desilike.samples import plotting
 
-        chain_fn = f"{prefix}_chain.npy"
-        if not Path(chain_fn).exists():
-            sampler = ZeusSampler(likelihood, seed=42, save_fn=f"{prefix}_chain", nwalkers=60)
-            sampler.run(check={"max_eigen_gr": 0.01})
-            chain = sampler.chains[0]
+        chain_fn = Path(f"{prefix}_chain.npy")
+        if chain_fn.exists():
+            print(f"Resuming sampler from {chain_fn}", flush=True)
+            sampler = ZeusSampler(likelihood, seed=42, save_fn=f"{prefix}_chain", nwalkers=60, chains=chain_fn)
         else:
-            chain = Chain.load(chain_fn)
+            print(f"Starting new sampler; no existing chain found at {chain_fn}", flush=True)
+            sampler = ZeusSampler(likelihood, seed=42, save_fn=f"{prefix}_chain", nwalkers=60)
+        sampler.run(check_every=30, check={"max_eigen_gr": 0.01})
+        print("Sampler run finished; making summary plots.", flush=True)
+        chain = sampler.chains[0]
         burnin, thin = single_triangle_chain_selection(cosmo, use_bphi_prior)
         chain = chain.remove_burnin(burnin)[::thin]
         if mode in ("bphi", "b-p"):
@@ -1390,15 +1328,12 @@ def run_fit(
         overlay_truth_values_on_triangle(g, params, truth_values)
         annotate_joint_triangle_map(g, params, [{"bestfit": profiler_bestfit, "map": chain_map}], true_fnl_loc_for_cosmo(cosmo))
         g.export(f"{prefix}_triangle.png")
-        joint_output = maybe_plot_joint_triangle(tracer, zsnaps, mode, simtype, cosmo, ells=ells)
+        joint_output = maybe_plot_joint_triangle(
+            tracer, zsnaps, mode, simtype, cosmo,
+            ells=ells, abias_suffix=abias_suffix, kmin=kmin, kmax=kmax,
+        )
         if joint_output is not None:
             print(f"Saved {joint_output}")
-        if mode == "bfnl" and use_bphi_prior:
-            fnl_output = plot_fnl_marginalise_bphi(
-                tracer, zsnaps, use_bphi_prior=True, mode=mode,
-                simtype=simtype, cosmo=cosmo, ells=ells,
-            )
-            print(f"Saved {fnl_output}")
 
 
 def command_pk(args):
@@ -1443,6 +1378,13 @@ def command_cov(args):
 def command_fit(args):
     ells = normalize_ells(args.ells)
     abias_suffix = abias_suffix_from_args(args)
+    if args.bphi_prior_ab:
+        if not args.with_bphi_prior:
+            print("WARNING: --bphi-prior-ab requires --with-bphi-prior.", file=sys.stderr)
+            raise SystemExit(1)
+        if len(args.zsnaps) != 1 or not np.isclose(float(args.zsnaps[0]), 1.1):
+            print("WARNING: assembly bias bphi prior not ready for this setting; use --zsnaps 1.1 only.", file=sys.stderr)
+            raise SystemExit(1)
     run_fit(
         tracer=args.tracer,
         zsnaps=args.zsnaps,
@@ -1457,7 +1399,61 @@ def command_fit(args):
         run_sampler=args.run_sampler,
         cov_veff=args.cov_veff,
         abias_suffix=abias_suffix,
+        bphi_prior_ab=args.bphi_prior_ab,
     )
+
+
+def command_plot(args):
+    from desilike.samples import Chain
+
+    reference_label = args.reference_label
+    comparison_labels = args.comparison_label
+    if comparison_labels is None:
+        comparison_labels = [f"comparison {i + 1}" for i in range(len(args.comparison_chain))]
+    if len(comparison_labels) != len(args.comparison_chain):
+        raise ValueError("--comparison-label must have the same length as --comparison-chain.")
+
+    paths = [args.reference_chain] + list(args.comparison_chain)
+    labels = [reference_label] + list(comparison_labels)
+    modes = [args.reference_mode or args.mode] + _broadcast_plot_arg(
+        args.comparison_mode, len(args.comparison_chain), args.mode, "--comparison-mode"
+    )
+    zsnaps_by_chain = [parse_zsnaps_text(args.reference_zsnaps, default=args.zsnaps)]
+    zsnaps_by_chain += [
+        parse_zsnaps_text(item, default=args.zsnaps)
+        for item in _broadcast_plot_arg(args.comparison_zsnaps, len(args.comparison_chain), None, "--comparison-zsnaps")
+    ]
+
+    chains = []
+    for path, mode, zsnaps in zip(paths, modes, zsnaps_by_chain):
+        if not path.exists():
+            raise FileNotFoundError(f"Missing chain file: {path}")
+        chain = Chain.load(path).remove_burnin(args.burnin)[::args.thin]
+        if mode in ("bphi", "b-p"):
+            add_bfnl_loc_to_chain(chain, mode=mode)
+        elif mode == "bfnl":
+            add_fnl_loc_to_bfnl_chain(chain, args.tracer, zsnaps)
+        chains.append(chain)
+
+    output = args.output or FIT_DIR / "chain_comparison_triangle.png"
+    ensure_dir(output.parent)
+
+    params = args.params
+    if params is None:
+        params = chains[0].params(varied=True, input=True)
+        params = triangle_params_with_bfnl_loc(chains[0], params, modes[0])
+
+    plot_contours(
+        chains,
+        params=params,
+        items=labels,
+        item_std=reference_label,
+        texts=args.text,
+        fn=output,
+        show=False,
+        filled=[True] + [False] * len(args.comparison_chain),
+    )
+    print(f"Saved {output}")
 
 
 def build_parser():
@@ -1473,8 +1469,6 @@ def build_parser():
     pk_parser.add_argument("--kmax", type=float, default=0.1)
     pk_parser.add_argument("--dk", type=float, default=0.002)
     pk_parser.add_argument("--ells", nargs="+", type=int, default=[0])
-    pk_parser.add_argument("--nmesh", type=int, default=256)
-    pk_parser.add_argument("--nthread", type=int, default=DEFAULT_NTHREAD)
     pk_parser.set_defaults(func=command_pk)
 
     cov_parser = subparsers.add_parser("cov", help="Compute Gaussian P(k) covariance with thecov from external SU/PNG P(k).")
@@ -1501,10 +1495,31 @@ def build_parser():
     fit_parser.add_argument("--ells", nargs="+", type=int, default=[0])
     fit_parser.add_argument("--mode", default="bphi", choices=PNG_MODES)
     fit_parser.add_argument("--with-bphi-prior", action="store_true")
+    fit_parser.add_argument("--bphi-prior-ab", "--bphi-prior-AB", dest="bphi_prior_ab", action="store_true",
+                            help="Use the z=1.1 assembly-bias bphi prior; only valid for --zsnaps 1.1.")
     fit_parser.add_argument("--run-sampler", action="store_true")
     fit_parser.add_argument("--cov-veff", action="store_true", help="Load DR1 n(z)-based effective-volume covariance files.")
     fit_parser.add_argument("--assembly-bias", action="store_true", help="Use assembly-bias P(k) data-vector files.")
     fit_parser.set_defaults(func=command_fit)
+
+    plot_parser = subparsers.add_parser("plot", help="Compare posterior chains against a reference chain.")
+    plot_parser.add_argument("--reference-chain", "--standard-chain", dest="reference_chain", type=Path, required=True, help="Reference/standard chain .npy file.")
+    plot_parser.add_argument("--reference-label", "--standard-label", dest="reference_label", default="reference")
+    plot_parser.add_argument("--comparison-chain", nargs="+", type=Path, required=True, help="One or more comparison chain .npy files.")
+    plot_parser.add_argument("--comparison-label", nargs="+", default=None, help="Labels for comparison chains; must match --comparison-chain length.")
+    plot_parser.add_argument("--params", nargs="+", default=None, help="Parameters to include in the triangle plot.")
+    plot_parser.add_argument("--text", default=None, help="Optional figure title/text.")
+    plot_parser.add_argument("--output", type=Path, default=None, help="Output triangle plot filename.")
+    plot_parser.add_argument("--burnin", type=float, default=0.5)
+    plot_parser.add_argument("--thin", type=int, default=5)
+    plot_parser.add_argument("--mode", default="bfnl", choices=PNG_MODES, help="Add derived parameters consistently with this fit mode.")
+    plot_parser.add_argument("--reference-mode", choices=PNG_MODES, default=None, help="Mode for the reference chain; defaults to --mode.")
+    plot_parser.add_argument("--comparison-mode", nargs="+", choices=PNG_MODES, default=None, help="Mode(s) for comparison chains.")
+    plot_parser.add_argument("--reference-zsnaps", default=None, help="Comma-separated redshifts for the reference chain, e.g. 0.5,0.8,1.1.")
+    plot_parser.add_argument("--comparison-zsnaps", nargs="+", default=None, help="Comma-separated redshift sets for comparison chains.")
+    plot_parser.add_argument("--tracer", default="LRG", choices=["LRG"])
+    plot_parser.add_argument("--zsnaps", nargs="+", type=float, default=DEFAULT_ZS)
+    plot_parser.set_defaults(func=command_plot)
 
     return parser
 
