@@ -139,6 +139,51 @@ shifts the catalog) are:
   benchmarks are promoted to production validation, audit whether HODDIES has
   already applied RSD so the pipeline does not double shift the catalog.
 
+## Installation
+
+This code runs on the DESI `cosmodesi` stack. On NERSC it is pre-built — the
+`.sh` launchers source it directly, no install needed:
+
+```bash
+source /global/common/software/desi/users/adematti/cosmodesi_environment.sh main
+```
+
+To build the stack elsewhere, follow the upstream installer:
+[cosmodesi/cosmodesiconda](https://github.com/cosmodesi/cosmodesiconda).
+
+Mock-building additionally requires the separate `abacushod` conda environment
+(`abacusnbody`/AbacusHOD, `HODDIES`); activate it with `conda activate abacushod`.
+
+## Dependencies
+
+The code targets the DESI `cosmodesi` software stack on NERSC; there is no
+standalone `requirements.txt`. The `.sh` launchers source the environment for
+each stage.
+
+**DESI clustering + inference stack** (provided by `cosmodesi_environment.sh`):
+
+| Package | Used for |
+|---------|----------|
+| `desilike` | Likelihood/inference framework: power-spectrum observables, templates, samplers (Minuit, Zeus), profilers, `Chain` I/O |
+| `pypower` | Power-spectrum estimation (`CatalogFFTPower`, `PowerSpectrumMultipoles`) |
+| `pycorr` | Two-point correlation functions (`wp`, multipoles) |
+| `cosmoprimo` | Cosmology primitives and the `Fourier` transfer-function interface |
+| `thecov` | Analytic Gaussian covariance (`CovarianceMatrix`) |
+| `lsstypes` | Covariance loading / effective-volume utilities |
+
+**Mock building** (the separate `abacushod` conda environment):
+
+| Package | Used for |
+|---------|----------|
+| `abacusnbody` (AbacusHOD) | Populate `AbacusSummit`/`AbacusSummitPNG` halo catalogs with galaxies |
+| `HODDIES` | ELG HOD population |
+
+**General scientific Python:** `numpy`, `scipy` (`interpolate.interp1d`,
+`stats.qmc`, `constants`), `pandas`, `matplotlib`, `corner`, `PyYAML`.
+
+Standard-library only otherwise (`argparse`, `os`, `sys`, `pathlib`, `re`,
+`functools`, `importlib`). Stages also run under SLURM (`srun`/`sbatch`).
+
 ## Typical Workflow
 
 ```bash
@@ -158,6 +203,3 @@ python bphi_prior_pipeline.py fit --simtype PNG --ells 0 2 --mode bphi --with-bp
 # Convenience launcher (mode = bfnl | bphi | b-p)
 bash bphi_prior_pipeline.sh bphi
 ```
-
-Compute environment is the DESI `cosmodesi` stack on NERSC; the `.sh` launchers
-source it and wrap each step in the appropriate `srun`/`sbatch` allocation.
