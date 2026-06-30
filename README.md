@@ -184,22 +184,48 @@ each stage.
 Standard-library only otherwise (`argparse`, `os`, `sys`, `pathlib`, `re`,
 `functools`, `importlib`). Stages also run under SLURM (`srun`/`sbatch`).
 
-## Typical Workflow
+## Example Usage
+
+The five stages below follow the analysis of `paper/main.tex`, shown for one LRG
+sample (`LRG`, `z=1.1`) validated against the `fnl=+30` PNG mock (`c300`). The
+`.sh` launchers source the `cosmodesi` environment and wrap each step in the
+appropriate `srun`/`sbatch` allocation.
 
 ```bash
-# 1. Preprocess halo catalogs (Gaussian + PNG), then build HOD mocks
-sbatch preproc_parallel.sh 000        # and 004
-sbatch preproc_parallel_PNG.sh 0      # SLURM array over PNG cosmologies
-python HOD_LHC.py LRG                  # Latin-hypercube HOD samples
-sbatch HOD_one_lhc.sh LRG SU           # populate realizations (SU or PNG)
+# 1. Build HOD mocks (paper "b_phi from separate-universe mocks")
+#    Preprocess the AbacusSummit base (c000) and low-sigma8 (c004) halo pairs,
+#    plus the AbacusSummitPNG validation boxes (c000, c300=fnl+30, c301=fnl-30).
+sbatch preproc_parallel.sh 000          # repeat for 004
+sbatch preproc_parallel_PNG.sh 0        # SLURM array over PNG cosmologies
+#    Draw N=100 Latin-hypercube HOD samples from the DESI 1% posteriors, then
+#    populate the 100 base/low-sigma8 pairs (and the PNG validation mock).
+python HOD_LHC.py LRG
+sbatch HOD_one_lhc.sh LRG SU
 
-# 2. Estimate b_phi and its prior
-python HOD_bphi.py LRG --mode PNG --cosmo 300
+# 2. Construct the b_phi prior (paper "b_phi as a separate-universe response")
+#    HOD_one_lhc.py records N_gal for each HOD point and cosmology; the SU
+#    response b_phi = 2 ln(N_gal^c000 / N_gal^c004) / ln(0.807952 / 0.75) is
+#    tabulated into backup/bphi_AbacusHOD_*.txt, which the fit auto-loads as the
+#    Gaussian prior N(<b_phi>, var) per redshift bin.
 
-# 3. Validate inputs, then run the joint P0+P2 fit (Scenario B shown)
-python bphi_prior_pipeline.py cov --simtype PNG --ells 0 2 --cov-veff
-python bphi_prior_pipeline.py fit --simtype PNG --ells 0 2 --mode bphi --with-bphi-prior --run-sampler
+# 3. Build the P0+P2 data vector and covariance (paper "Data Vectors and Covariances")
+#    Validate the pypower multipoles, then the thecov Gaussian covariance scaled
+#    to the DESI effective volume.
+python bphi_prior_pipeline.py pk  --simtype PNG --tracer LRG --zsnaps 1.1 --cosmo 300 --ells 0 2 --kmin 0.006
+python bphi_prior_pipeline.py cov --simtype PNG --tracer LRG --zsnaps 1.1 --cosmo 300 --ells 0 2 --kmin 0.006 --cov-veff
+
+# 4. Run the joint PNG fit with the HOD b_phi prior (paper "Inference")
+#    Default bfnl mode: sample B_i = b_phi_i * fnl under the Gaussian b_phi prior,
+#    fitting P0+P2 jointly with the zeus sampler.
+python bphi_prior_pipeline.py fit \
+    --simtype PNG --tracer LRG --zsnaps 1.1 --mode bfnl \
+    --kmin 0.006 --ells 0 2 --cov-veff --cosmo 300 \
+    --with-bphi-prior --run-sampler
+
+# 5. Marginalize bfnl -> fnl and plot (paper "Results")
+#    Reweight the bfnl chain over the b_phi prior to obtain the fnl posterior.
+python bphi_prior_plot_fnl.py --mode bfnl --fnl-method description --cosmo 300
 
 # Convenience launcher (mode = bfnl | bphi | b-p)
-bash bphi_prior_pipeline.sh bphi
+bash bphi_prior_pipeline.sh bfnl
 ```
