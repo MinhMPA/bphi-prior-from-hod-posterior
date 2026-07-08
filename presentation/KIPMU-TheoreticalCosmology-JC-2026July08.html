@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>bϕ priors from HOD posteriors — JC discussion of arXiv:2607.01314</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<style>
+/* ---------- Claude palette ---------- */
+:root {
+  --ivory:  #FAF9F5;
+  --paper:  #F0EFEA;
+  --ink:    #262625;
+  --terra:  #CC785C;
+  --kraft:  #D4A27F;
+  --gray:   #91918D;
+  --slate:  #6A7B8A;
+}
+.reveal-viewport { background: var(--ivory); }
+.reveal { font-family: -apple-system, "Helvetica Neue", Helvetica, Inter, Arial, sans-serif;
+          font-size: 34px; color: var(--ink); }
+.reveal .slides section { text-align: left; }
+.reveal h1, .reveal h2, .reveal h3 { font-family: inherit; color: var(--ink);
+  font-weight: 750; letter-spacing: -0.02em; text-transform: none; }
+.reveal h1 { font-size: 2.0em; line-height: 1.08; }
+.reveal h2 { font-size: 1.35em; line-height: 1.15; margin-bottom: 0.5em; }
+.reveal a { color: var(--terra); }
+.reveal .kicker { font-size: 0.55em; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--terra); margin-bottom: 0.9em; }
+.reveal .accent { color: var(--terra); }
+.reveal .muted  { color: var(--gray); }
+.reveal .small  { font-size: 0.62em; }
+.reveal .big    { font-size: 1.35em; font-weight: 750; line-height: 1.25; }
+.reveal .center-v { display: flex; flex-direction: column; justify-content: center; height: 100%; }
+.reveal .cols { display: flex; gap: 5%; align-items: center; }
+.reveal .cols > div { flex: 1; min-width: 0; }
+.reveal figure { margin: 0; text-align: center; }
+.reveal figure img { max-width: 100%; max-height: 62vh; border: none; box-shadow: none; background: transparent; }
+.reveal figcaption { font-size: 0.48em; color: var(--gray); margin-top: 0.6em; }
+.reveal .card { background: var(--paper); border-radius: 14px; padding: 0.7em 0.9em; }
+.reveal .eq { text-align: center; margin: 0.5em 0; }
+.reveal ul { margin-left: 0.2em; }
+.reveal li { margin: 0.35em 0; line-height: 1.3; }
+.reveal li::marker { color: var(--terra); }
+/* pipeline flow */
+.flow { display: flex; flex-direction: column; gap: 0.42em; font-size: 0.72em; }
+.flow .step { background: var(--paper); border-left: 7px solid var(--terra);
+  border-radius: 10px; padding: 0.45em 0.8em; }
+.flow .step b { color: var(--terra); }
+.flow .arrow { text-align: center; color: var(--gray); line-height: 0.6; font-size: 1.1em; }
+/* comparison table */
+table.clean { border-collapse: collapse; font-size: 0.62em; width: 100%; }
+table.clean th, table.clean td { padding: 0.45em 0.7em; text-align: center;
+  border-bottom: 1.5px solid #DDD9CE; }
+table.clean th { color: var(--terra); font-weight: 700;
+  border-bottom: 2.5px solid var(--terra); }
+table.clean td:first-child, table.clean th:first-child { text-align: left; }
+.hl { background: #F3E3DB; border-radius: 6px; }
+/* three routes */
+.routes { display: flex; gap: 3.5%; }
+.routes .card { flex: 1; font-size: 0.62em; line-height: 1.35; }
+.routes h3 { font-size: 0.78em; color: var(--terra); margin: 0 0 0.4em 0; }
+/* progress + slide number */
+.reveal .progress { color: var(--terra); height: 5px; }
+.reveal .slide-number { background: transparent; color: var(--gray); font-size: 16px; }
+.backup-tag { position: absolute; top: 0; right: 0; background: var(--kraft); color: var(--ivory);
+  font-size: 0.45em; font-weight: 700; letter-spacing: 0.12em; padding: 0.35em 0.9em;
+  border-radius: 0 0 0 10px; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+<!-- 1 ▸ TITLE -->
+<section>
+  <div class="center-v">
+    <h1>Constraining local \(f_{\rm NL}\) with \(b_\phi\) priors<br>from HOD posteriors</h1>
+    <p class="accent" style="font-size:0.75em; margin-top:0.6em;">
+      How I stop worrying about non-universality and \(b_\phi\)</p>
+    <p class="small muted" style="margin-top:2.2em;">
+      Jiaxi Yu (禹佳希) &amp; <b style="color:var(--ink)">Nhat-Minh Nguyen (Nguyễn Nhật Minh)</b><br>
+      arXiv:2607.01314 · Kavli IPMU &amp; ICISE ·
+      <a href="https://github.com/MinhMPA/bphi-prior-from-hod-posterior">github.com/MinhMPA/bphi-prior-from-hod-posterior</a></p>
+  </div>
+  <aside class="notes">Journal club, ~15 min + 5 Q&amp;A. Paper with Jiaxi Yu.</aside>
+</section>
+
+<!-- 2 ▸ WHY CARE -->
+<section>
+  <div class="kicker">Why should a theorist care</div>
+  <h2>Gaussianity is a precision null test of inflation</h2>
+  <div class="center-v" style="height:70%;">
+    <p>Single-field slow-roll inflation predicts</p>
+    <p class="eq">\[ f_{\rm NL} \simeq \tfrac{5}{12}\,(n_s - 1) \sim 10^{-2} \]</p>
+    <p class="big">A detection of \(|f_{\rm NL}| \gtrsim 1\) rules out
+      <span class="accent">all</span> single-field models.</p>
+    <p class="small muted">CMB (Planck): \(\sigma(f_{\rm NL}) \approx 5\).
+      Galaxy surveys (DESI → MUST, Spec-S5, WST) aim at \(\sigma(f_{\rm NL}) \sim \mathcal{O}(1)\).</p>
+  </div>
+  <aside class="notes">Consistency relation. Order-1 detection is decisive — that's the target for spectroscopic surveys.</aside>
+</section>
+
+<!-- 3 ▸ LOCAL PNG -->
+<section>
+  <div class="kicker">Local primordial non-Gaussianity</div>
+  <h2>A long mode rescales small-scale power</h2>
+  <div class="cols">
+    <div>
+      <p class="eq">\[ \phi(\boldsymbol{x}) = \phi_{\rm G}(\boldsymbol{x})
+         + f_{\rm NL}\left[\phi_{\rm G}^2(\boldsymbol{x}) - \langle\phi_{\rm G}^2\rangle\right] \]</p>
+      <ul class="small">
+        <li>Quadratic term couples one <b>long</b> mode to two <b>short</b> modes
+            (squeezed bispectrum)</li>
+        <li>Patches with high \(\phi_{\rm long}\) form structure earlier
+            → locally enhanced small-scale variance \(\sigma_8^{\rm local}\)</li>
+      </ul>
+    </div>
+    <div>
+      <figure>
+        <img src="assets/pbsplit.png" alt="peak-background split">
+        <figcaption>Short-wavelength fluctuations riding on a long-wavelength mode.</figcaption>
+      </figure>
+    </div>
+  </div>
+  <aside class="notes">Peak-background split picture: local PNG makes σ8 spatially modulated by the long-wavelength potential.</aside>
+</section>
+
+<!-- 4 ▸ SCALE-DEPENDENT BIAS -->
+<section>
+  <div class="kicker">The observable</div>
+  <h2>Scale-dependent galaxy bias \(\;\propto k^{-2}\)</h2>
+  <div class="cols">
+    <div style="flex:1.1">
+      <p class="eq">\[ P_{gg}(k) = \Big[\, b_1 +
+        \frac{\color{#CC785C}{b_\phi f_{\rm NL}}}{\mathcal{M}(k)} \Big]^2 P_{mm}(k) + P_{\rm shot} \]</p>
+      <ul class="small">
+        <li>\(\mathcal{M}(k) \propto k^2 T(k)\): potential → density transfer</li>
+        <li>Correction blows up on <b>large scales</b> — a unique low-\(k\) signature
+            [Dalal+ 2008]</li>
+        <li>No other late-time physics mimics it</li>
+      </ul>
+    </div>
+    <div style="flex:1">
+      <figure>
+        <img src="assets/pk_scale_dependent_bias.png" alt="P(k) with fNL = 0, ±500">
+        <figcaption>Galaxy \(P(k)\) for \(f_{\rm NL} = 0, \pm500\): the effect lives at \(k \lesssim 0.02\,h\,{\rm Mpc}^{-1}\).</figcaption>
+      </figure>
+    </div>
+  </div>
+  <aside class="notes">Galaxies are biased tracers; local PNG adds bϕ fNL / M(k) to the effective bias. k⁻² divergence at low k.</aside>
+</section>
+
+<!-- 5 ▸ THE CATCH -->
+<section>
+  <div class="center-v">
+    <div class="kicker">The catch</div>
+    <p class="big" style="font-size:1.6em;">
+      Galaxy clustering only measures the product<br>
+      <span class="accent">\(b_\phi \times f_{\rm NL}\)</span>
+    </p>
+    <p style="margin-top:0.8em;">Without independent knowledge of \(b_\phi\):
+      no central value, no error bar on \(f_{\rm NL}\) alone.</p>
+    <p class="small muted">\(b_\phi\) = response of the galaxy sample to the primordial potential —
+      set by messy galaxy formation, not by inflation.</p>
+  </div>
+  <aside class="notes">Perfect degeneracy. Uncertainty in bϕ is THE obstacle for robust fNL from LSS.</aside>
+</section>
+
+<!-- 6 ▸ UNIVERSALITY & ITS FAILURE -->
+<section>
+  <div class="kicker">The standard shortcut — and why it fails</div>
+  <h2>The universality relation</h2>
+  <div class="cols">
+    <div style="flex:0.85">
+      <p class="eq">\[ b_\phi = 2\delta_c\,(b_1 - 1) \]</p>
+      <ul class="small">
+        <li>\(b_\phi = 2\,\partial\ln \bar n/\partial\ln\sigma_8\): valid if abundance is
+            a function of peak height only</li>
+        <li>Holds for <b>mass-selected halos</b> (top row)</li>
+        <li>Fails for <b>stellar-mass / color / flux selected galaxies</b> (bottom row)
+            — what surveys actually observe</li>
+        <li>Assuming it anyway → biased \(f_{\rm NL}\), overconfident errors</li>
+      </ul>
+    </div>
+    <div style="flex:1.15">
+      <figure>
+        <img src="assets/bphi_vs_b1_selection.png" alt="bphi vs b1 for halo-mass vs stellar-mass selection">
+        <figcaption>\(b_\phi\) vs \(b_1\) in hydro sims: \(M_{\rm h}\)-selection follows the relation, \(M_*\)-selection does not [Barreira+].</figcaption>
+      </figure>
+    </div>
+  </div>
+  <aside class="notes">Most published fNL constraints fix bϕ via this relation. Simulated galaxies show clear departures once selection is realistic.</aside>
+</section>
+
+<!-- 7 ▸ THREE ROUTES -->
+<section>
+  <div class="kicker">How to get \(b_\phi\)</div>
+  <h2>Three routes to a \(b_\phi\) prior</h2>
+  <div class="routes">
+    <div class="card">
+      <h3>1 · Simulate</h3>
+      Calibrate \(b_\phi\)(galaxy properties) on hydro / semi-analytic galaxies.<br><br>
+      <span class="muted">Inherits the galaxy-formation model.</span>
+    </div>
+    <div class="card">
+      <h3>2 · Count</h3>
+      Read the abundance response from the observed \(dn/dz\).<br><br>
+      <span class="muted">Hinges on modeling survey selection.</span>
+    </div>
+    <div class="card" style="outline: 3px solid var(--terra);">
+      <h3>3 · This work</h3>
+      Map the <b>small-scale clustering of the same sample</b> onto \(b_\phi\),
+      via the galaxy–halo connection.<br><br>
+      <span class="muted">Depends on the HOD — different failure mode, cross-validates 1 &amp; 2.</span>
+    </div>
+  </div>
+  <p class="small muted" style="margin-top:1em;">The three fail differently — their agreement (or not) is itself informative.</p>
+  <aside class="notes">Route 1: TNG-trained ML, b∇²δ proxy, SAM marginalization. Route 2: dn/dz (Barreira &amp; Krause). Ours anchors to the target sample's own clustering.</aside>
+</section>
+
+<!-- 8 ▸ HOD 101 -->
+<section>
+  <div class="kicker">Galaxy–halo connection in one slide</div>
+  <h2>The halo occupation distribution (HOD)</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Probability that a halo of mass \(M\) hosts galaxies:</p>
+      <p class="eq small">\[ \langle N_{\rm cen}\rangle = \tfrac{f_{\rm ic}}{2}\,
+        {\rm erfc}\!\left[\tfrac{\log_{10}(M_{\rm cut}/M)}{\sqrt{2}\,\sigma}\right], \quad
+        \langle N_{\rm sat}\rangle = \langle N_{\rm cen}\rangle
+        \left(\tfrac{M - \kappa M_{\rm cut}}{M_1}\right)^{\alpha} \]</p>
+      <ul class="small">
+        <li>5–8 parameters; fully specifies mock galaxy catalogs given an N-body simulation</li>
+        <li>Constrained by <b>small-scale clustering</b> (fits to DESI EDR LRGs [Yuan+ 2023])</li>
+      </ul>
+    </div>
+    <div>
+      <figure>
+        <img src="assets/hod_occupation.png" alt="HOD occupation functions">
+        <figcaption>DESI LRG1 best-fit occupation (Eq. 15–16 of the paper).</figcaption>
+      </figure>
+    </div>
+  </div>
+  <aside class="notes">For theorists: HOD = empirical map halos→galaxies. The same data that fix these curves carry information about bϕ.</aside>
+</section>
+
+<!-- 9 ▸ PIPELINE -->
+<section>
+  <div class="kicker">Method</div>
+  <h2>From HOD posterior to \(b_\phi\) prior</h2>
+  <div class="flow">
+    <div class="step"><b>①  Sample</b> — DESI EDR LRG HOD posteriors (3 z-bins), widened to \(3\sigma\);
+      100 Latin-hypercube draws per bin</div>
+    <div class="arrow">↓</div>
+    <div class="step"><b>②  Populate</b> — each draw → galaxy mock <i>pair</i>:
+      AbacusSummit \(\sigma_8 = 0.808\) (c000) and \(\sigma_8 = 0.750\) (c004), same seed</div>
+    <div class="arrow">↓</div>
+    <div class="step"><b>③  Measure</b> — separate-universe response
+      \( \;b_\phi = 2\,\dfrac{\Delta \ln N_{\rm gal}}{\Delta \ln \sigma_8}\; \) per pair</div>
+    <div class="arrow">↓</div>
+    <div class="step"><b>④  Build prior</b> — Gaussian
+      \( \mathcal{N}(\langle b_\phi\rangle, {\rm Var}[b_\phi]) \) from the 100 draws
+      → plug into the large-scale \(P_\ell(k)\) likelihood</div>
+  </div>
+  <aside class="notes">Key trick: local PNG ↔ local σ8 change, so a pair of simulations differing only in σ8 measures bϕ directly. HOD uncertainty propagates into the prior width.</aside>
+</section>
+
+<!-- 10 ▸ THE PRIORS -->
+<section>
+  <div class="kicker">Result i</div>
+  <h2>Data-driven \(b_\phi\) priors for DESI LRGs</h2>
+  <div class="cols">
+    <div style="flex:1.25">
+      <figure><img src="assets/bphi_priors.png" alt="bphi priors"></figure>
+    </div>
+    <div style="flex:0.75">
+      <ul class="small">
+        <li>\(b_\phi \sim \mathcal{N}(3.2\text{–}4.2,\; \sigma \approx 2)\)
+            across \(0.4 < z < 1.1\)</li>
+        <li>Consistent with universality <i>on average</i>, but honest about the spread</li>
+        <li>Assembly bias shifts the prior only mildly (dashed)</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">Widths ~2: informative but not aggressive. This is the deliverable of the method.</aside>
+</section>
+
+<!-- 11 ▸ VALIDATION -->
+<section>
+  <div class="kicker">Result ii — validation</div>
+  <h2>Unbiased \(f_{\rm NL}\), 9–55% tighter</h2>
+  <div class="cols">
+    <div style="flex:1.4">
+      <figure>
+        <img src="assets/fig1_fnl_posteriors.png" alt="fNL posteriors with and without prior">
+        <figcaption>PNG mocks with \(f_{\rm NL}^{\rm true} = 0, +30, -30\) (rows) × LRG1/2/3 (columns).</figcaption>
+      </figure>
+    </div>
+    <div style="flex:0.6">
+      <ul class="small">
+        <li>Recovery test on independent <b>AbacusPNG</b> mocks</li>
+        <li><span class="accent"><b>with prior</b></span>: truth recovered within \(1\sigma\), always</li>
+        <li>Largest gains at high \(z\) (larger \(b_1\)): up to <b>55%</b></li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">Blue = with prior, orange = without. Without prior, posteriors pile up near 0 regardless of truth — the data alone can't split the product.</aside>
+</section>
+
+<!-- 12 ▸ WHAT THE PRIOR BUYS -->
+<section>
+  <div class="kicker">Result iii — what the prior buys</div>
+  <h2>Between agnostic and over-confident</h2>
+  <table class="clean">
+    <tr><th>Treatment of \(b_\phi\)</th><th>Assumption</th><th>\(\sigma(f_{\rm NL})\), LRG3, \(f_{\rm NL}^{\rm true}=0\)</th></tr>
+    <tr><td>No prior (product only)</td><td>none</td><td>\(\approx 80\)</td></tr>
+    <tr class="hl"><td><b>HOD-derived prior</b> (this work)</td><td>HOD from small-scale clustering</td><td>\(\approx 44\)</td></tr>
+    <tr><td>Universality, \(p=1\)</td><td>exact \(b_\phi = 2\delta_c(b_1{-}1)\)</td><td>\(\approx 23\)</td></tr>
+  </table>
+  <ul class="small" style="margin-top:0.9em;">
+    <li>Universality is tighter — by assuming what real galaxies violate</li>
+    <li>Joint LRG1+2+3 with our prior: \(\sigma(f_{\rm NL}) \approx 16\) —
+        <b>~65% better</b> than LRG3 alone; low-\(z\) volume is not wasted</li>
+    <li>Robust to SDSS-calibrated assembly bias (absorbed by \(b_1\))</li>
+  </ul>
+  <aside class="notes">σ values: no-prior ~80 (79-81), prior 42-46, p=1 ~23. Joint all-LRG: 6.2±15.8. Assembly bias shifts b1 by 2-3σ but fNL is stable.</aside>
+</section>
+
+<!-- 13 ▸ TAKE-HOME -->
+<section>
+  <div class="center-v">
+    <div class="kicker">Take-home</div>
+    <p class="big">Small-scale clustering of the <em>same</em> galaxies<br>
+      can anchor \(b_\phi\) — <span class="accent">no universality assumption needed</span>.</p>
+    <ul style="margin-top:0.9em; font-size:0.72em;">
+      <li>Unbiased \(f_{\rm NL}\) recovery, constraints 9–55% tighter; robust to assembly bias</li>
+      <li>Pilot limitations: LRGs only · Gaussianized HOD posteriors · mocks, not data</li>
+      <li>Next: DESI DR1/DR2 fits · ELGs &amp; quasars · full posterior propagation</li>
+    </ul>
+    <p class="small muted" style="margin-top:1.2em;">
+      Code: <a href="https://github.com/MinhMPA/bphi-prior-from-hod-posterior">MinhMPA/bphi-prior-from-hod-posterior</a>
+      &nbsp;·&nbsp; arXiv:2607.01314 &nbsp;·&nbsp; Thank you!</p>
+  </div>
+  <aside class="notes">End ~14 min. Invite discussion: which of the three routes would you trust, and where should they disagree?</aside>
+</section>
+
+<!-- ═══ BACKUPS ═══ -->
+
+<!-- B1 ▸ HOD PARAMETERS -->
+<section>
+  <div class="backup-tag">Backup</div>
+  <h2>HOD sampling ranges (Tab. I)</h2>
+  <table class="clean">
+    <tr><th>Parameter</th><th>LRG1</th><th>LRG2</th><th>LRG3</th></tr>
+    <tr><td>\(\log M_{\rm cut}\)</td><td>\(\mathcal{N}(12.79, 0.45^2)\)</td><td>\(\mathcal{N}(12.64, 0.51^2)\)</td><td>\(\mathcal{N}(12.68, 0.38^2)\)</td></tr>
+    <tr><td>\(\log M_1\)</td><td>\(\mathcal{N}(13.88, 0.33^2)\)</td><td>\(\mathcal{N}(13.71, 0.21^2)\)</td><td>\(\mathcal{N}(13.60, 0.47^2)\)</td></tr>
+    <tr><td>\(\sigma\)</td><td>\(\mathcal{N}(0.15, 0.24^2)\)</td><td>\(\mathcal{N}(0.09, 0.27^2)\)</td><td>\(\mathcal{N}(0.37, 0.20^2)^*\)</td></tr>
+    <tr><td>\(\alpha\)</td><td>\(\mathcal{N}(1.07, 0.48^2)\)</td><td>\(\mathcal{N}(1.18, 0.39^2)\)</td><td>\(\mathcal{N}(0.72, 0.34^2)^*\)</td></tr>
+    <tr><td>\(\kappa\)</td><td>\(\mathcal{N}(1.40, 1.80^2)\)</td><td>\(\mathcal{N}(0.60, 1.20^2)\)</td><td>\(\mathcal{N}(0.51, 0.43^2)^*\)</td></tr>
+    <tr><td>\(\alpha_c,\ \alpha_s\)</td><td>\(\mathcal{N}(0.33, 0.21^2),\ \mathcal{N}(0.80, 0.21^2)\)</td><td>\(\mathcal{N}(0.19, 0.27^2),\ \mathcal{N}(0.95, 0.21^2)\)</td><td>–</td></tr>
+    <tr><td>\(f_{\rm ic}\)</td><td>\(\mathcal{N}(0.70, 0.45^2)\)</td><td>\(\mathcal{N}(0.62, 0.21^2)\)</td><td>\(\mathcal{N}(0.19, 0.14^2)^*\)</td></tr>
+  </table>
+  <p class="small muted">LRG1/2 widened to \(3\sigma_{\rm HOD}\); LRG3 kept at \(1\sigma_{\rm HOD}\) (already broad).
+    * clipped at 0.01. Cross-covariances neglected.</p>
+</section>
+
+<!-- B2 ▸ ASSEMBLY BIAS -->
+<section>
+  <div class="backup-tag">Backup</div>
+  <h2>Assembly-bias robustness (Fig. 2, Tab. VII)</h2>
+  <div class="cols">
+    <div style="flex:1.1">
+      <figure><img src="assets/fig2_assembly_bias.png" alt="assembly bias test"></figure>
+    </div>
+    <div style="flex:0.9">
+      <ul class="small">
+        <li>Decorated HOD with SDSS-LRG environment-based assembly bias
+            (\(B_{\rm cen}=-0.04\), \(B_{\rm sat}=-0.17\))</li>
+        <li>\(b_1\) shifts by 2–3\(\sigma\) — absorbs the clustering-amplitude change</li>
+        <li>\(f_{\rm NL}\) posterior essentially unchanged:
+            e.g. \(-1.5^{+42.2}_{-46.3} \to -0.3^{+41.6}_{-45.1}\) at \(f_{\rm NL}^{\rm true}=0\)</li>
+        <li>Targeted check (LRG3, one prescription) — not a general immunity claim</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- B3 ▸ MODE COMPARISON -->
+<section>
+  <div class="backup-tag">Backup</div>
+  <h2>Full parameterization comparison (Tab. V, LRG3)</h2>
+  <table class="clean">
+    <tr><th>\(f_{\rm NL}^{\rm true}\)</th><th>bfnl, no prior</th><th>bfnl + prior</th><th>bphi + prior</th><th>universality \(p=1\)</th></tr>
+    <tr><td>0</td><td>\(-0.9^{+79.1}_{-81.0}\)</td><td>\(-1.5^{+42.2}_{-46.3}\)</td><td>\(-0.3^{+43.0}_{-40.2}\)</td><td>\(-0.6^{+23.6}_{-23.4}\)</td></tr>
+    <tr><td>+30</td><td>\(-0.9^{+106.6}_{-103.7}\)</td><td>\(37.2^{+63.9}_{-29.9}\)</td><td>\(37.5^{+61.9}_{-30.3}\)</td><td>\(33.3^{+23.0}_{-22.4}\)</td></tr>
+    <tr><td>−30</td><td>\(-0.9^{+100.3}_{-96.7}\)</td><td>\(-30.8^{+32.8}_{-63.3}\)</td><td>\(-31.4^{+33.6}_{-64.9}\)</td><td>\(-27.1^{+23.6}_{-24.0}\)</td></tr>
+  </table>
+  <ul class="small" style="margin-top:0.9em;">
+    <li>bfnl (sample \(B_i = b_{\phi,i} f_{\rm NL}\), reweight) ≡ bphi (sample both) when the prior is on — validates the post-processing</li>
+    <li>\(p=1\) matches DESI DR1 LRG precision (\(f_{\rm NL} = 6^{+22}_{-18}\)) but bakes in universality;
+        sims already suggest \(p \neq 1\) for galaxies, \(p \approx 1.6\) for quasars</li>
+  </ul>
+</section>
+
+<!-- B4 ▸ MARGINALIZATION -->
+<section>
+  <div class="backup-tag">Backup</div>
+  <h2>Marginal \(f_{\rm NL}\) from \(B_i = b_{\phi,i} f_{\rm NL}\) chains (App. A)</h2>
+  <p class="small">Importance-reweight the sampled \(\{B_i\}\) chain onto an \(f_{\rm NL}\) grid,
+    letting the \(b_\phi\) prior supply what the data lack:</p>
+  <p class="eq">\[ \ln W = -N_{\rm bin}\ln|f| \;-\;
+     \tfrac{1}{2}\sum_i \left( \frac{B_i/f - \mu_{b_\phi,i}}{\sigma_{b_\phi,i}} \right)^2 + {\rm const.} \]</p>
+  <ul class="small">
+    <li>Jacobian \(|f|^{-N_{\rm bin}}\) from \(B_i \to b_{\phi,i}\) at fixed \(f\); no divergence at
+        \(f \to 0\) — the prior suppresses weights as \(e^{-1/f^2}\)</li>
+    <li>For with-prior chains, divide out the copy of the prior already in the chain
+        (\(\hat P \propto \sum W/Q\), \(Q = \sum_f W\))</li>
+    <li>No re-sampling needed — pure post-processing; enforces a single \(f_{\rm NL}\) across z-bins</li>
+  </ul>
+</section>
+
+</div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+Reveal.initialize({
+  hash: true,
+  slideNumber: 'c/t',
+  width: 1280, height: 720,
+  margin: 0.06,
+  transition: 'fade',
+  transitionSpeed: 'fast',
+  controls: false,
+  katex: { macros: {} },
+  plugins: [ RevealNotes, RevealMath.KaTeX ]
+});
+</script>
+</body>
+</html>
