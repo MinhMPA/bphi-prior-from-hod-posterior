@@ -2,7 +2,7 @@
 
 Build `b_phi` priors from HOD posteriors and use them to constrain local `f_NL`.
 
-Jiaxi Yu and Nhat-Minh Nguyen (2026), arXiv:26XX.XXXXX —
+Jiaxi Yu and Nhat-Minh Nguyen (2026), [arXiv:2607.01314](https://arxiv.org/abs/2607.01314) (submitted to PRD) —
 [github.com/MinhMPA/bphi-prior-from-hod-posterior](https://github.com/MinhMPA/bphi-prior-from-hod-posterior).
 
 Local PNG adds a scale-dependent term `~ f_NL * b_phi` to the galaxy power
