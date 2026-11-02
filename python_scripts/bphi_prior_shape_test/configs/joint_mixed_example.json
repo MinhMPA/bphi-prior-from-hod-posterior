@@ -1,0 +1,8 @@
+{
+  "name": "joint_mixed_example",
+  "tracers": {
+    "LRG1": {"ensemble": "chain_s3", "prior": "empirical", "kmax": 0.08},
+    "LRG2": {"ensemble": "chain_s3", "prior": "kde", "kmax": 0.09, "kde_scale": 1.0},
+    "LRG3": {"ensemble": "chain_s1", "prior": "gaussian", "kmax": 0.10}
+  }
+}

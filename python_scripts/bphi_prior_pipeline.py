@@ -16,7 +16,8 @@ from HOD_utils import (
 )
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(os.environ.get('BPHI_DATA_ROOT', Path(__file__).resolve().parent)).expanduser()
+PAPER_DATA = Path(os.environ.get('BPHI_PAPER_DATA', Path(__file__).resolve().parent)).expanduser()
 BAOCOV_FILE = ROOT.parent / "PFS_mock-tests" / "baocov.py"
 MOCK_DIRS = {
     "SU": ROOT / "mocks_lhc_SU",
@@ -24,7 +25,7 @@ MOCK_DIRS = {
 }
 BPHI_STATS_FILE = ROOT / "backup" / "bphi_AbacusHOD_LRG.txt"
 BPHI_STATS_UPDATE_FILES = (ROOT / "backup" / "bphi_AbacusHOD_z1.1_updated.txt",)
-BPHI_STATS_ASSEMBLY_FILE = ROOT / "bphi_results_abacushod_Bcentm0p040_Bsatm0p170.txt"
+BPHI_STATS_ASSEMBLY_FILE = PAPER_DATA / "bphi_results_abacushod_Bcentm0p040_Bsatm0p170.txt"
 BPHI_BESTFIT_B1_FILE = ROOT / "bphi_true_value_PNGmock_fit" / "b1_with-sn0.txt"
 BPHI_SU_DENOM = np.log(0.807952 / 0.75)
 BPHI_NGAL_MIN = 100000
@@ -347,8 +348,8 @@ def cov_veff_for_zsnap(zsnap):
     from effective_volume import read_nz, veff_from_file
 
     zmin, zmax, area_total = config
-    ngc_file = ROOT / "LRG_NGC_nz.txt"
-    sgc_file = ROOT / "LRG_SGC_nz.txt"
+    ngc_file = PAPER_DATA / "LRG_NGC_nz.txt"
+    sgc_file = PAPER_DATA / "LRG_SGC_nz.txt"
     ngc_area0 = read_nz(ngc_file)["area"]
     sgc_area0 = read_nz(sgc_file)["area"]
     area_ngc = area_total * ngc_area0 / (ngc_area0 + sgc_area0)

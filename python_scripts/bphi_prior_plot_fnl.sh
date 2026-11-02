@@ -45,11 +45,11 @@ if false; then
         "${fit_dir}/png_fit_PNG_LRG_z0p500_c300_bfnl_ells0-2_no_bphi_prior_chain.npy" \
         "${fit_dir}/png_fit_PNG_LRG_z0p500_c301_bfnl_ells0-2_with_bphi_prior_chain.npy" \
         "${fit_dir}/png_fit_PNG_LRG_z0p500_c301_bfnl_ells0-2_no_bphi_prior_chain.npy" \
-    --comparison-label "c000 no prior" "c300 with bphi prior" "c300 no prior" "c301 with bphi prior" "c301 no prior" \
+    --comparison-label "c000 weak prior" "c300 with bphi prior" "c300 weak prior" "c301 with bphi prior" "c301 weak prior" \
     --comparison-zsnaps 0.5 0.5 0.5 0.5 0.5 \
     --comparison-bphi-prior flat gaussian flat gaussian flat \
     --comparison-cosmo 000 300 300 301 301 \
-    --text "LRG1: with vs without bphi prior" \
+    --text "LRG1: HOD vs weak bphi prior" \
     --output "${plot_dir}/validation_with_without_bphi_prior_z0p500.png"
 
 # Point 1: same consistency check for LRG2.
@@ -62,11 +62,11 @@ if false; then
         "${fit_dir}/png_fit_PNG_LRG_z0p800_c300_bfnl_ells0-2_no_bphi_prior_chain.npy" \
         "${fit_dir}/png_fit_PNG_LRG_z0p800_c301_bfnl_ells0-2_with_bphi_prior_chain.npy" \
         "${fit_dir}/png_fit_PNG_LRG_z0p800_c301_bfnl_ells0-2_no_bphi_prior_chain.npy" \
-    --comparison-label "c000 no prior" "c300 with bphi prior" "c300 no prior" "c301 with bphi prior" "c301 no prior" \
+    --comparison-label "c000 weak prior" "c300 with bphi prior" "c300 weak prior" "c301 with bphi prior" "c301 weak prior" \
     --comparison-zsnaps 0.8 0.8 0.8 0.8 0.8 \
     --comparison-bphi-prior flat gaussian flat gaussian flat \
     --comparison-cosmo 000 300 300 301 301 \
-    --text "LRG2: with vs without bphi prior" \
+    --text "LRG2: HOD vs weak bphi prior" \
     --output "${plot_dir}/validation_with_without_bphi_prior_z0p800.png"
 
 # Point 1: same consistency check for LRG3.
@@ -79,11 +79,11 @@ if false; then
         "${fit_dir}/png_fit_PNG_LRG_z1p100_c300_bfnl_ells0-2_no_bphi_prior_chain.npy" \
         "${fit_dir}/png_fit_PNG_LRG_z1p100_c301_bfnl_ells0-2_with_bphi_prior_chain.npy" \
         "${fit_dir}/png_fit_PNG_LRG_z1p100_c301_bfnl_ells0-2_no_bphi_prior_chain.npy" \
-    --comparison-label "c000 no prior" "c300 with bphi prior" "c300 no prior" "c301 with bphi prior" "c301 no prior" \
+    --comparison-label "c000 weak prior" "c300 with bphi prior" "c300 weak prior" "c301 with bphi prior" "c301 weak prior" \
     --comparison-zsnaps 1.1 1.1 1.1 1.1 1.1 \
     --comparison-bphi-prior flat gaussian flat gaussian flat \
     --comparison-cosmo 000 300 300 301 301 \
-    --text "LRG3: with vs without bphi prior" \
+    --text "LRG3: HOD vs weak bphi prior" \
     --output "${plot_dir}/validation_with_without_bphi_prior_z1p100.png"
 
 # Point 2: LRG3 model comparison for each cosmology.
@@ -96,7 +96,7 @@ for cosmo in 000 300 301; do
             "${fit_dir}/png_fit_PNG_LRG_z1p100_c${cosmo}_bphi_ells0-2_with_bphi_prior_chain.npy" \
             "${fit_dir}/png_fit_PNG_LRG_z1p100_c${cosmo}_b-p_ells0-2_no_bphi_prior_chain.npy" \
             "${fit_dir}/png_fit_PNG_LRG_z1p100_c${cosmo}_bfnl_ells0-2_no_bphi_prior_chain.npy" \
-        --comparison-label "bphi + bphi prior" "universality p=1" "bfnl no prior" \
+        --comparison-label "bphi + bphi prior" "universality p=1" "bfnl weak prior" \
         --comparison-mode bphi b-p bfnl \
         --comparison-zsnaps 1.1 1.1 1.1 \
         --comparison-bphi-prior direct direct flat \
@@ -162,7 +162,8 @@ done
     --output "${plot_dir}/validation_snapshot_grid.pdf"
 
 # Point 4 summary figure: assembly-bias grid for LRG3.
-# Rows are cosmologies; columns show b1 and fNL posteriors with/without assembly bias.
+# Rows are cosmologies; columns show b1 and fNL posteriors for:
+# P(k)+bphi prior, contaminated P(k)+bphi prior, and contaminated P(k)+contaminated bphi prior.
 "${python_cmd}" "${script}" \
     --assembly-grid \
     --fnl-method "${fnl_method}" \

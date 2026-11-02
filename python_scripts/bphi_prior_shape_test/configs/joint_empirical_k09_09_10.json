@@ -1,0 +1,8 @@
+{
+  "name": "joint_empirical_k09_09_10",
+  "tracers": {
+    "LRG1": {"ensemble": "chain_s3", "prior": "empirical", "kmax": 0.09},
+    "LRG2": {"ensemble": "chain_s3", "prior": "empirical", "kmax": 0.09},
+    "LRG3": {"ensemble": "chain_s1", "prior": "empirical", "kmax": 0.10}
+  }
+}

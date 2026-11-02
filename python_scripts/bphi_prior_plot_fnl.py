@@ -66,15 +66,15 @@ def zset_tag(zsnaps):
     return "-".join(ztag(zsnap) for zsnap in zsnaps)
 
 
-def bfnl_chain_path_for_zsnaps(fit_dir, zsnaps, cosmo, with_bphi_prior=True, assembly_bias=False):
-    prior = "with_bphi_prior" if with_bphi_prior else "no_bphi_prior"
+def bfnl_chain_path_for_zsnaps(fit_dir, zsnaps, cosmo, with_bphi_prior=True, assembly_bias=False, bphi_prior_ab=False):
+    prior = "with_bphi_prior_AB" if bphi_prior_ab else ("with_bphi_prior" if with_bphi_prior else "no_bphi_prior")
     abias = "_Bcentm0p040_Bsatm0p170" if assembly_bias else ""
     return Path(fit_dir) / f"png_fit_PNG_LRG_z{zset_tag(zsnaps)}_c{clean_cosmo(cosmo)}_bfnl_ells0-2{abias}_{prior}_chain.npy"
 
 
-def bfnl_chain_path(fit_dir, zsnap, cosmo, with_bphi_prior=True, assembly_bias=False):
+def bfnl_chain_path(fit_dir, zsnap, cosmo, with_bphi_prior=True, assembly_bias=False, bphi_prior_ab=False):
     return bfnl_chain_path_for_zsnaps(
-        fit_dir, [zsnap], cosmo, with_bphi_prior=with_bphi_prior, assembly_bias=assembly_bias,
+        fit_dir, [zsnap], cosmo, with_bphi_prior=with_bphi_prior, assembly_bias=assembly_bias, bphi_prior_ab=bphi_prior_ab,
     )
 
 
@@ -375,7 +375,7 @@ def command_snapshot_grid(args):
             entries = []
             for with_prior, label, color, linestyle in [
                 (True, "with prior", "C0", "-"),
-                (False, "no prior", "C1", "--"),
+                (False, "weak prior", "C1", "--"),
             ]:
                 path = bfnl_chain_path(fit_dir, zsnap, cosmo, with_bphi_prior=with_prior)
                 chain = load_chain(path, "bfnl", [zsnap], args.tracer, burnin=args.burnin, thin=args.thin)
@@ -402,12 +402,15 @@ def command_snapshot_grid(args):
                 show_ylabel=icol == 0,
             )
             if icol == 0:
-                ax.text(0.03, 0.88, fnl_truth_label(cosmo), transform=ax.transAxes, fontsize=11, weight="bold")
+                ax.text(0.03, 0.88, fnl_truth_label(cosmo), transform=ax.transAxes, fontsize=12, weight="bold")
+            else:
+                ax.set_yticks([])
             if irow == 0 and icol == len(zsnaps) - 1:
-                ax.legend(frameon=False, fontsize=9)
+                ax.legend(frameon=False, fontsize=12)
+            ax.set_ylim(0.0, 0.0135)
 
-    fig.tight_layout(pad=0.2, h_pad=0.0, w_pad=0.35)
-    fig.subplots_adjust(hspace=0.0)
+    fig.tight_layout(pad=0.0, h_pad=0.0, w_pad=0.0)
+    fig.subplots_adjust(hspace=0.0, wspace=0.0)
     fig.savefig(output, dpi=200, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved {output}")
@@ -434,11 +437,27 @@ def command_assembly_grid(args):
 
     all_b1 = []
     cache = {}
+    assembly_cases = [
+        {"assembly_bias": False, "bphi_prior_ab": False, "label": r"$P(k) + b_\phi$ prior", "linestyle": "-", "color": "C0", "bphi_prior": "gaussian"},
+        {"assembly_bias": True, "bphi_prior_ab": False, "label": r"contaminated $P(k) + b_\phi$ prior", "linestyle": "--", "color": "C1", "bphi_prior": "gaussian"},
+    ]
+    if len(zsnaps) == 1 and np.isclose(zsnaps[0], 1.1):
+        assembly_cases.append({
+            "assembly_bias": True,
+            "bphi_prior_ab": True,
+            "label": r"contaminated $P(k)$ + contaminated $b_\phi$ prior",
+            "linestyle": "-.",
+            "color": "C2",
+            "bphi_prior": "assembly",
+        })
     for cosmo in cosmos:
-        for assembly_bias in [False, True]:
-            path = bfnl_chain_path_for_zsnaps(fit_dir, zsnaps, cosmo, with_bphi_prior=True, assembly_bias=assembly_bias)
+        for case in assembly_cases:
+            path = bfnl_chain_path_for_zsnaps(
+                fit_dir, zsnaps, cosmo, with_bphi_prior=True,
+                assembly_bias=case["assembly_bias"], bphi_prior_ab=case["bphi_prior_ab"],
+            )
             chain = load_chain(path, "bfnl", zsnaps, args.tracer, burnin=args.burnin, thin=args.thin)
-            cache[(cosmo, assembly_bias)] = chain
+            cache[(cosmo, case["assembly_bias"], case["bphi_prior_ab"])] = chain
             for zsnap in zsnaps:
                 all_b1.append(b1_samples_from_chain(chain, args.tracer, zsnap, max_samples=args.max_samples, seed=args.seed))
     b1_min = min(float(np.min(samples)) for samples in all_b1)
@@ -450,35 +469,37 @@ def command_assembly_grid(args):
     for irow, cosmo in enumerate(cosmos):
         entries_b1 = []
         entries_fnl = []
-        for assembly_bias, label, linestyle, abias_color in [
-            (False, "standard", "-", "C0"),
-            (True, "assembly bias", "--", "C1"),
-        ]:
-            chain = cache[(cosmo, assembly_bias)]
+        for case in assembly_cases:
+            chain = cache[(cosmo, case["assembly_bias"], case["bphi_prior_ab"])]
             for iz, zsnap in enumerate(zsnaps):
                 b1_samples = b1_samples_from_chain(chain, args.tracer, zsnap, max_samples=args.max_samples, seed=args.seed)
-                b1_label = label if len(zsnaps) == 1 else f"{label} {redshift_label(zsnap)}"
-                summarize_samples(f"{cosmo_label(cosmo)} {redshift_label(zsnap)} {label}", b1_samples, quantity="b1")
-                b1_color = abias_color if len(zsnaps) == 1 else joint_lrg_colors[iz % len(joint_lrg_colors)]
+                b1_label = case["label"] if len(zsnaps) == 1 else f"{case['label']} {redshift_label(zsnap)}"
+                summarize_samples(f"{cosmo_label(cosmo)} {redshift_label(zsnap)} {case['label']}", b1_samples, quantity="b1")
+                b1_color = case["color"] if len(zsnaps) == 1 else joint_lrg_colors[iz % len(joint_lrg_colors)]
                 entries_b1.append({
                     "label": b1_label,
                     "samples": b1_samples,
                     "color": b1_color,
-                    "linestyle": linestyle,
+                    "linestyle": case["linestyle"],
                 })
             fnl_samples = fnl_samples_from_chain(
                 chain,
                 args.tracer,
                 zsnaps,
                 mode="bfnl",
-                bphi_prior="gaussian",
+                bphi_prior=case["bphi_prior"],
                 seed=args.seed,
                 max_samples=args.max_samples,
                 fnl_method=args.fnl_method,
                 bfnl_chain_prior="induced",
             )
-            summarize_samples(f"{cosmo_label(cosmo)} {zlabel} {label}", fnl_samples, quantity="fNL")
-            entries_fnl.append({"label": label, "samples": fnl_samples, "color": "C0" if not assembly_bias else "C1", "linestyle": linestyle})
+            summarize_samples(f"{cosmo_label(cosmo)} {zlabel} {case['label']}", fnl_samples, quantity="fNL")
+            entries_fnl.append({
+                "label": case["label"],
+                "samples": fnl_samples,
+                "color": case["color"],
+                "linestyle": case["linestyle"],
+            })
 
         plot_hist_pair(
             axes[irow, 0],

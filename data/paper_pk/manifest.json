@@ -1,0 +1,275 @@
+{
+  "format_version": 1,
+  "fits": [
+    {
+      "sample": "LRG1",
+      "z_snapshot": 0.5,
+      "cosmo": "000",
+      "fnl_true": 0,
+      "kmin": 0.006,
+      "kmax": 0.09,
+      "dk": 0.002,
+      "n_k_bins": 42,
+      "ells": [
+        0,
+        2
+      ],
+      "cov_cosmo": "000",
+      "cov_veff": true,
+      "prior": "empirical",
+      "spectrum_file": "LRG1_c000_pk.csv",
+      "covariance_file": "LRG1_c000_covariance.csv",
+      "settings_sha256": "a23fc9f8ab6662ac1c48727d0f4fa091f44e77f00dd4cde132dc8da43dcd0781",
+      "inputs": [
+        {
+          "filename": "LRG_z0.500_c000_default_pk_RSD.npy",
+          "sha256": "86289b880b752e4ad83cd9f988dfb02148d8cf61fa2c26d9d635857118fd4043"
+        },
+        {
+          "filename": "LRG_z0.500_c000_default_cov_ells0-2_veff_RSD.npy",
+          "sha256": "f4a2481f7c576e2d7a7bd591e79a67bfcd7058efa67fc92b21292b93035f538d"
+        }
+      ]
+    },
+    {
+      "sample": "LRG1",
+      "z_snapshot": 0.5,
+      "cosmo": "300",
+      "fnl_true": 30,
+      "kmin": 0.006,
+      "kmax": 0.09,
+      "dk": 0.002,
+      "n_k_bins": 42,
+      "ells": [
+        0,
+        2
+      ],
+      "cov_cosmo": "000",
+      "cov_veff": true,
+      "prior": "empirical",
+      "spectrum_file": "LRG1_c300_pk.csv",
+      "covariance_file": "LRG1_c300_covariance.csv",
+      "settings_sha256": "8f97ee10fbf6baf80582012637710a10a9010865a7baf48f208ecba44933436c",
+      "inputs": [
+        {
+          "filename": "LRG_z0.500_c300_default_pk_RSD.npy",
+          "sha256": "4ca7d5c1a1f1b43202e926b1ef5921ef3b9de6e32d77b72535108b54a86925e0"
+        },
+        {
+          "filename": "LRG_z0.500_c000_default_cov_ells0-2_veff_RSD.npy",
+          "sha256": "f4a2481f7c576e2d7a7bd591e79a67bfcd7058efa67fc92b21292b93035f538d"
+        }
+      ]
+    },
+    {
+      "sample": "LRG1",
+      "z_snapshot": 0.5,
+      "cosmo": "301",
+      "fnl_true": -30,
+      "kmin": 0.006,
+      "kmax": 0.09,
+      "dk": 0.002,
+      "n_k_bins": 42,
+      "ells": [
+        0,
+        2
+      ],
+      "cov_cosmo": "000",
+      "cov_veff": true,
+      "prior": "empirical",
+      "spectrum_file": "LRG1_c301_pk.csv",
+      "covariance_file": "LRG1_c301_covariance.csv",
+      "settings_sha256": "3e5e05aebb20323540ac229345819d11c39c69c378550fdd237a7eae1414e67e",
+      "inputs": [
+        {
+          "filename": "LRG_z0.500_c301_default_pk_RSD.npy",
+          "sha256": "61bbd7c53779690bcbbacf92e4eab6f7b21b625c303d4b911653c0bace19f09f"
+        },
+        {
+          "filename": "LRG_z0.500_c000_default_cov_ells0-2_veff_RSD.npy",
+          "sha256": "f4a2481f7c576e2d7a7bd591e79a67bfcd7058efa67fc92b21292b93035f538d"
+        }
+      ]
+    },
+    {
+      "sample": "LRG2",
+      "z_snapshot": 0.8,
+      "cosmo": "000",
+      "fnl_true": 0,
+      "kmin": 0.006,
+      "kmax": 0.09,
+      "dk": 0.002,
+      "n_k_bins": 42,
+      "ells": [
+        0,
+        2
+      ],
+      "cov_cosmo": "000",
+      "cov_veff": true,
+      "prior": "empirical",
+      "spectrum_file": "LRG2_c000_pk.csv",
+      "covariance_file": "LRG2_c000_covariance.csv",
+      "settings_sha256": "d89b0c6c4d6313703aba5d7a963b3c294ee258173cf89b609cd94dd5a2f93912",
+      "inputs": [
+        {
+          "filename": "LRG_z0.800_c000_default_pk_RSD.npy",
+          "sha256": "9a16c4c4bb71a323c4809b97e20e390ac7456892a1cc75cfcdb37833ec19351c"
+        },
+        {
+          "filename": "LRG_z0.800_c000_default_cov_ells0-2_veff_RSD.npy",
+          "sha256": "64e3cb06abae69ac920ab1a53cc76169e8c15fd4eea600146bac189a2f99e7b7"
+        }
+      ]
+    },
+    {
+      "sample": "LRG2",
+      "z_snapshot": 0.8,
+      "cosmo": "300",
+      "fnl_true": 30,
+      "kmin": 0.006,
+      "kmax": 0.09,
+      "dk": 0.002,
+      "n_k_bins": 42,
+      "ells": [
+        0,
+        2
+      ],
+      "cov_cosmo": "000",
+      "cov_veff": true,
+      "prior": "empirical",
+      "spectrum_file": "LRG2_c300_pk.csv",
+      "covariance_file": "LRG2_c300_covariance.csv",
+      "settings_sha256": "1f3d6cedc9842a16f92519fc0d71cdde1d23def7dcdfd6157a6eb1d88d65d2b0",
+      "inputs": [
+        {
+          "filename": "LRG_z0.800_c300_default_pk_RSD.npy",
+          "sha256": "78808b3b90325cc288be5aed5057e77126526bb55f4dcfb6547aec9e412e0985"
+        },
+        {
+          "filename": "LRG_z0.800_c000_default_cov_ells0-2_veff_RSD.npy",
+          "sha256": "64e3cb06abae69ac920ab1a53cc76169e8c15fd4eea600146bac189a2f99e7b7"
+        }
+      ]
+    },
+    {
+      "sample": "LRG2",
+      "z_snapshot": 0.8,
+      "cosmo": "301",
+      "fnl_true": -30,
+      "kmin": 0.006,
+      "kmax": 0.09,
+      "dk": 0.002,
+      "n_k_bins": 42,
+      "ells": [
+        0,
+        2
+      ],
+      "cov_cosmo": "000",
+      "cov_veff": true,
+      "prior": "empirical",
+      "spectrum_file": "LRG2_c301_pk.csv",
+      "covariance_file": "LRG2_c301_covariance.csv",
+      "settings_sha256": "1a0e19bed3a5c9591e268f6d4dc419e7d4c79180ecb472b1669558d66961b666",
+      "inputs": [
+        {
+          "filename": "LRG_z0.800_c301_default_pk_RSD.npy",
+          "sha256": "99e133b780c709ef6873a164790f26187b26aa17ec0f6672a116464fdc898560"
+        },
+        {
+          "filename": "LRG_z0.800_c000_default_cov_ells0-2_veff_RSD.npy",
+          "sha256": "64e3cb06abae69ac920ab1a53cc76169e8c15fd4eea600146bac189a2f99e7b7"
+        }
+      ]
+    },
+    {
+      "sample": "LRG3",
+      "z_snapshot": 1.1,
+      "cosmo": "000",
+      "fnl_true": 0,
+      "kmin": 0.006,
+      "kmax": 0.1,
+      "dk": 0.002,
+      "n_k_bins": 47,
+      "ells": [
+        0,
+        2
+      ],
+      "cov_cosmo": "000",
+      "cov_veff": true,
+      "prior": "empirical",
+      "spectrum_file": "LRG3_c000_pk.csv",
+      "covariance_file": "LRG3_c000_covariance.csv",
+      "settings_sha256": "19bfbc54bd57e11a949350612368158095dcb259be0c145bf2e8642d72c18af8",
+      "inputs": [
+        {
+          "filename": "LRG_z1.100_c000_default_pk_RSD.npy",
+          "sha256": "a3c979f59378738bd010d2461be8f9a364302f401e46a454428dd6fce65ffa9a"
+        },
+        {
+          "filename": "LRG_z1.100_c000_default_cov_ells0-2_veff_RSD.npy",
+          "sha256": "883ac54af758d16d46ce80a3d18009cf35cd4445f1c0f6e01ba40ed0f453c970"
+        }
+      ]
+    },
+    {
+      "sample": "LRG3",
+      "z_snapshot": 1.1,
+      "cosmo": "300",
+      "fnl_true": 30,
+      "kmin": 0.006,
+      "kmax": 0.1,
+      "dk": 0.002,
+      "n_k_bins": 47,
+      "ells": [
+        0,
+        2
+      ],
+      "cov_cosmo": "000",
+      "cov_veff": true,
+      "prior": "empirical",
+      "spectrum_file": "LRG3_c300_pk.csv",
+      "covariance_file": "LRG3_c300_covariance.csv",
+      "settings_sha256": "a7e63d533d62554baec9fa2820d72b715b6c2e5b2726061f835ff72df33e39b8",
+      "inputs": [
+        {
+          "filename": "LRG_z1.100_c300_default_pk_RSD.npy",
+          "sha256": "771ba4388127f2cd70b89404a21c178314445fa8dbb767df797d2ac745213eec"
+        },
+        {
+          "filename": "LRG_z1.100_c000_default_cov_ells0-2_veff_RSD.npy",
+          "sha256": "883ac54af758d16d46ce80a3d18009cf35cd4445f1c0f6e01ba40ed0f453c970"
+        }
+      ]
+    },
+    {
+      "sample": "LRG3",
+      "z_snapshot": 1.1,
+      "cosmo": "301",
+      "fnl_true": -30,
+      "kmin": 0.006,
+      "kmax": 0.1,
+      "dk": 0.002,
+      "n_k_bins": 47,
+      "ells": [
+        0,
+        2
+      ],
+      "cov_cosmo": "000",
+      "cov_veff": true,
+      "prior": "empirical",
+      "spectrum_file": "LRG3_c301_pk.csv",
+      "covariance_file": "LRG3_c301_covariance.csv",
+      "settings_sha256": "f04356137018bb2bd6a5747ea48bb0f6b3701b3fc996c31a47c4318c5a6c4d45",
+      "inputs": [
+        {
+          "filename": "LRG_z1.100_c301_default_pk_RSD.npy",
+          "sha256": "26c5aefa8a93163c781b817ae7ecb4b6a17c819255549a4157cc6f4355df7e66"
+        },
+        {
+          "filename": "LRG_z1.100_c000_default_cov_ells0-2_veff_RSD.npy",
+          "sha256": "883ac54af758d16d46ce80a3d18009cf35cd4445f1c0f6e01ba40ed0f453c970"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "lrg1_s3_empirical_k007",
+  "tracers": {
+    "LRG1": {"ensemble": "chain_s3", "prior": "empirical", "kmax": 0.07}
+  }
+}

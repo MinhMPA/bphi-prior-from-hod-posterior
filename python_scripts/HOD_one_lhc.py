@@ -68,7 +68,7 @@ def main():
     if not use_default_hod:
         theta = df_lhc.loc[hod_id - 1, names].to_numpy()
 
-    dir_source = "/pscratch/sd/j/jiaxi/b_phi"
+    dir_source = os.environ.get("BPHI_DATA_ROOT", str(Path(__file__).resolve().parent))
     output_root = args.output_root or f"{dir_source}/mocks_lhc_{simtype}"
     results_root = args.output_root or dir_source
     zdir = f"{zsnap:.3f}"
@@ -140,7 +140,8 @@ def main():
             else:
                 print('ELG backend: JAX default (GPU-enabled env)')
 
-            sys.path.append('/global/homes/j/jiaxi/codes/HODDIES')
+            if os.environ.get("HODDIES_PATH"):
+                sys.path.append(os.environ["HODDIES_PATH"])
             from HODDIES import HOD
             # Apply LHC params
             ELG_params = {}

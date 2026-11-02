@@ -1,0 +1,14 @@
+{
+  "nsamples": 100,
+  "seed": 42,
+  "reference_nbar": {"0.5": 0.0005, "0.8": 0.0005, "1.1": 0.000184},
+  "sigma_factor": {"0.5": 1.0, "0.8": 1.0, "1.1": 0.7071067811865475},
+  "ngal_min": 100000,
+  "review_before_production": [
+    "The low-z nbar values are approximate reference-survey values, not verified original likelihood inputs. Confirm them before approval.",
+    "The high-z sigma/sqrt(2) conversion is a proposed mapping inferred from the archived versus published wp summaries. Check it in the interactive debug session; the original chain producer was not inspected.",
+    "Low-z NPZ parameter names are inferred from the local convention and published summaries.",
+    "New unphysical chain proposals are rejected, not floored. The legacy LHC retains its original 0.01 floor.",
+    "The published prior loader includes HOD id=0 and does not apply a fresh count cut to the updated high-z raw table. Keep published and common-cut summaries distinct."
+  ]
+}

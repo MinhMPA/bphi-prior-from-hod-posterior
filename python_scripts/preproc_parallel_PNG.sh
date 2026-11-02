@@ -13,7 +13,7 @@
 #SBATCH -e tests/logs/%x_%A_%a.err
 
 i=$1
-dir_source="/pscratch/sd/j/jiaxi/b_phi"
+dir_source="${BPHI_DATA_ROOT:-$(cd "$(dirname "$0")" && pwd)}"
 
 source /global/common/software/desi/users/adematti/cosmodesi_environment.sh main
 module load python

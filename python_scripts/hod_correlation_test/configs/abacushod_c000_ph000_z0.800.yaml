@@ -1,0 +1,45 @@
+# Based on b_phi/HOD_config/tmp/abacushod_c000_ph000_z0.800.yaml.
+# Snapshot/cosmology are fixed here; individual HOD draws are applied in Python.
+sim_params:
+  sim_dir: /global/cfs/projectdirs/desi/cosmosim/Abacus/
+  sim_name: AbacusSummit_base_c000_ph000
+  output_dir: ./hod_catalog_output/
+  subsample_dir: ./abacus_hod_subsamples/
+  z_mock: 0.800
+  cleaned_halos: true
+HOD_params:
+  use_particles: true
+  want_ranks: false
+  want_AB: true
+  want_shear: false
+  density_sigma: 3
+  tracer_flags:
+    LRG: true
+    ELG: false
+    QSO: false
+  want_rsd: true
+  write_to_disk: false
+  LRG_params:
+    logM_cut: 12.64
+    logM1: 13.71
+    sigma: 0.09
+    alpha: 1.18
+    kappa: 0.6
+    alpha_c: 0.19
+    alpha_s: 0.95
+    ic: 0.62
+    s: 0
+    s_v: 0
+    s_p: 0
+    s_r: 0
+    Acent: 0
+    Asat: 0
+    Bcent: 0
+    Bsat: 0
+clustering_params:
+  clustering_type: xirppi
+  bin_params:
+    logmin: -2
+    logmax: 2
+    nbins: 49
+  pimax: 40
