@@ -1,16 +1,21 @@
-# bphi Prior from HOD Posterior
+# bphi Priors from HOD Posteriors
 
-<<<<<<< HEAD
-This repository provides HOD-derived samples of the local-PNG response
-`b_phi` and scripts for using them in galaxy power-spectrum fits. The
-released empirical priors are in [data/bphi_prior_samples.csv](data/bphi_prior_samples.csv);
-their format and provenance are described in [data/README.md](data/README.md).
-The same data directory also contains the reference DESI One-Percent LRG HOD
-chains and the mock power spectra, full covariances, and best-fit model values
-used in the paper figures.
-The HOD chains are from Yuan et al.'s [DESI One-Percent LRG and QSO HOD
-analysis](https://arxiv.org/abs/2306.06314); their original public data release
-is [Zenodo 7972386](https://doi.org/10.5281/zenodo.7972386).
+This repository provides HOD-derived samples of the local primordial
+non-Gaussianity response `b_phi`, together with scripts for constructing and
+using these priors in galaxy power-spectrum fits. Local PNG contributes a
+scale-dependent clustering signal proportional to `b_phi * f_NL`.
+
+**Paper:** Jiaxi Yu and Nhat-Minh Nguyen, [*How I stop worrying about
+non-universality and b_phi: Constraining local f_NL with b_phi priors from HOD
+posteriors*](https://arxiv.org/abs/2607.01314).
+
+The released HOD-derived samples are in
+[data/bphi_prior_samples.csv](data/bphi_prior_samples.csv). The data directory
+also contains the reference DESI One-Percent LRG HOD chains and the mock power
+spectra, covariances, and best-fit models used in the paper figures. The HOD
+chains come from [Yuan et al.'s DESI One-Percent analysis](https://arxiv.org/abs/2306.06314)
+and its [public data release](https://doi.org/10.5281/zenodo.7972386).
+See [data/README.md](data/README.md) for formats, provenance, and limitations.
 
 ## Released Priors
 
@@ -24,15 +29,22 @@ is [Zenodo 7972386](https://doi.org/10.5281/zenodo.7972386).
 The quoted standard deviations use `ddof=0`. The assembly-bias sample is
 a separate test with `Bcent=-0.04` and `Bsat=-0.17`; it is not the fiducial
 LRG3 prior. These are empirical samples, not Gaussian draws. For a quick
-plot and moment-matched Gaussian comparison, run:
+plot and moment-matched Gaussian comparison, run from the repository root:
 
 ```bash
 python python_scripts/plot_bphi_priors.py --output bphi_priors.pdf
 ```
 
-This requires a compatible installation of NumPy and Matplotlib. The script
-also accepts a PNG output filename and prints the means, variances and standard
-deviations.
+To recreate the paper's mock power-spectrum comparison from the released CSVs:
+
+```bash
+python python_scripts/plot_released_pk.py --output released_pk.pdf
+```
+
+Both commands require NumPy and Matplotlib. The first produces a four-panel
+comparison using the paper's samples, but its layout is not identical to the
+updated paper figure. Other posterior figures require additional saved fit
+chains or figure data that are not included in the repository.
 
 ## Current Analysis
 
@@ -78,14 +90,24 @@ for the meaning of the draw identifiers and assembly-bias pairing.
 
 ## Running Fits
 
-The CSV and its plotting script are self-contained apart from Python packages.
-Full fits and HOD calculations additionally require a compatible scientific
-environment, halo catalogues, and the original analysis input formats. The
-reference HOD chains and figure-ready mock spectra and covariances are included,
-but the halo catalogues, original power-spectrum objects, and PNG-fit MCMC
-chains are not. Several validation comparisons also require historical fit
-chains. Data locations and cluster settings must be configured for the
-installation; see [python_scripts/README.md](python_scripts/README.md).
+Full fits and HOD calculations require a compatible scientific environment and
+the original analysis input formats. The reference HOD chains and figure-ready
+mock spectra and covariances are included, but the halo catalogues, original
+power-spectrum objects, and PNG-fit MCMC chains are not. The figure-ready CSVs
+alone cannot run the fits. Several validation comparisons also require
+historical fit chains.
+
+The fitting workflow uses `desilike`, `pypower`, `thecov`, `cosmoprimo`, JAX,
+and sampler packages; HOD calculations additionally require AbacusHOD and the
+appropriate halo catalogues. On NERSC, a compatible DESI environment can be
+activated with:
+
+```bash
+source /global/common/software/desi/users/adematti/cosmodesi_environment.sh main
+```
+
+Outside NERSC, install a compatible environment and adapt the paths and cluster
+settings; see [python_scripts/README.md](python_scripts/README.md).
 
 With those inputs and dependencies available, an example joint fit is:
 
@@ -102,72 +124,4 @@ The check prepares a frozen input manifest; the fit resumes compatible saved
 checkpoints and reports its convergence status. Do not run concurrent writers
 for the same output. Use separate output directories or configurations for
 distinct experiments. The Slurm launchers reflect the original NERSC setup and
-may require account, allocation and environment changes.
-=======
-Build `b_phi` priors from HOD posteriors and use them to constrain local `f_NL`.
-
-Jiaxi Yu and Nhat-Minh Nguyen (2026), [arXiv:2607.01314](https://arxiv.org/abs/2607.01314) (submitted to PRD) —
-[github.com/MinhMPA/bphi-prior-from-hod-posterior](https://github.com/MinhMPA/bphi-prior-from-hod-posterior).
-
-Local PNG adds a scale-dependent term `~ f_NL * b_phi` to the galaxy power
-spectrum, so the uncertainty on `b_phi` sets the floor on `f_NL` constraints.
-This code builds DESI-like HOD mocks, measures `b_phi` with a separate-universe
-estimator to form a Gaussian prior, and feeds that prior into a `desilike` PNG
-fit for `f_NL`. The method is described in `paper/main.tex`.
-
-## Install
-
-The code runs on the DESI `cosmodesi` stack, which provides `desilike`,
-`pypower`, `pycorr`, `cosmoprimo`, and `thecov` (plus `numpy`, `scipy`,
-`matplotlib`). On NERSC it is pre-built:
-
-```bash
-source /global/common/software/desi/users/adematti/cosmodesi_environment.sh main
-```
-
-Elsewhere, build it with the upstream installer,
-[cosmodesi/cosmodesiconda](https://github.com/cosmodesi/cosmodesiconda).
-
-Building the mocks additionally needs the `abacushod` conda environment
-(`abacusnbody`/AbacusHOD, and `HODDIES` for ELGs):
-
-```bash
-conda activate abacushod
-```
-
-## Run
-
-All scripts live in `python_scripts/`. A minimal LRG example (`z=1.1`, validated
-against the `f_NL=+30` mock `c300`):
-
-```bash
-# 1. Build HOD mocks: AbacusSummit base (c000) + low-sigma8 (c004) pairs, plus PNG boxes.
-sbatch preproc_parallel.sh 000          # repeat for 004
-sbatch preproc_parallel_PNG.sh 0
-python HOD_LHC.py LRG                    # draw the Latin-hypercube HOD samples
-sbatch HOD_one_lhc.sh LRG SU            # populate the mocks (records N_gal per cosmology)
-
-# 2. Build the data vector and covariance.
-python bphi_prior_pipeline.py pk  --simtype PNG --tracer LRG --zsnaps 1.1 --cosmo 300 --ells 0 2 --kmin 0.006
-python bphi_prior_pipeline.py cov --simtype PNG --tracer LRG --zsnaps 1.1 --cosmo 300 --ells 0 2 --kmin 0.006 --cov-veff
-
-# 3. Fit f_NL with the HOD b_phi prior.
-python bphi_prior_pipeline.py fit --simtype PNG --tracer LRG --zsnaps 1.1 --cosmo 300 \
-    --ells 0 2 --kmin 0.006 --cov-veff --mode bfnl --with-bphi-prior --run-sampler
-
-# 4. Marginalize to f_NL and plot.
-python bphi_prior_plot_fnl.py --mode bfnl --fnl-method description --cosmo 300
-```
-
-The `b_phi` prior is formed from the mock number counts via the separate-universe
-response `b_phi = 2 ln(N_gal^c000 / N_gal^c004) / ln(0.807952/0.75)`, tabulated
-under `backup/` and auto-loaded by the fit. `--mode` picks the PNG
-parameterization: `bfnl` (default), `bphi`, or `b-p`.
-
-## More
-
-- `python_scripts/README.md`: full script reference, options, and output layout.
-- `python bphi_prior_pipeline.py {pk,cov,fit,plot} --help`: all pipeline flags.
-- [desilike documentation](https://desilike.readthedocs.io/) for the likelihood,
-  templates, priors, and samplers used in the fit.
->>>>>>> f80a12a404be594bc2b786786bdf676779204b44
+may require account, allocation, and environment changes.
