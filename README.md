@@ -55,6 +55,12 @@ The joint fit uses a common `f_NL` and independent per-bin prior measures;
 a row number does not imply a cross-redshift HOD pairing. Alternative
 configurations support Gaussian and KDE approximations and other scale cuts.
 
+For a joint sensitivity test using empirical `chain_s1` priors for all three
+tracers, see `python_scripts/bphi_prior_shape_test/run_joint_s1.sh` and the
+[script guide](python_scripts/README.md#joint-chain_s1-sensitivity-test). The
+released fiducial CSV does not include the LRG1/2 `chain_s1` responses; this
+test requires an additional response table or a complete HOD run.
+
 Each response is computed from separate-universe galaxy counts as
 
 ```text

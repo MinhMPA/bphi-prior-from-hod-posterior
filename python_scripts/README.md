@@ -78,6 +78,34 @@ environment is not distributed here. `DESILIKE_SITE_PACKAGES` can point to
 a compatible local desilike installation when using the provided environment
 helper.
 
+### Joint chain_s1 sensitivity test
+
+`bphi_prior_shape_test/run_joint_s1.sh` uses empirical `chain_s1` priors for
+LRG1, LRG2 and LRG3 at kmax=(0.09, 0.09, 0.10) h/Mpc. It uses a distinct
+run name, leaving existing fiducial outputs untouched. The released fiducial
+CSV lacks LRG1/2 `chain_s1` responses: set `BPHI_HOD_RUN` to the complete
+HOD run containing `tables/bphi_samples.csv` and `manifest.json`, or provide
+all three `chain_s1` groups in the released CSV schema via `BPHI_PRIOR_CSV`.
+If both are set, `BPHI_HOD_RUN` takes precedence. Full-fit dependencies and
+the original power-spectrum inputs described above are also required.
+
+On allocated CPU nodes, with the input and output environment configured:
+
+```bash
+export BPHI_HOD_RUN=/path/to/complete/hod/run
+cd python_scripts/bphi_prior_shape_test
+bash run_joint_s1.sh check
+# Run one cosmology per node, after check succeeds:
+bash run_joint_s1.sh fit --cosmos 000  # also run 300 and 301 separately
+```
+
+The fit resumes matching checkpoints and requires a convergence check. Once
+all fits are ready, `bash run_joint_s1.sh compare` writes a PNG and CSV;
+the comparison also requires fiducial `joint_empirical_k09_09_10` fits and
+their frozen manifest in the configured results root. Those chains are not
+included in this repository. These three mocks are a sensitivity test, not
+a general calibration of bias or coverage.
+
 The snapshot-specific YAML files in
 `hod_correlation_test/configs/` are templates. Review
 their simulation paths, subsample directories and output directories before
